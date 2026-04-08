@@ -2,11 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 import { Geist, Geist_Mono } from "next/font/google";
+import { cn } from "@/lib/utils";
 
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const geistMono = Geist_Mono({
   subsets: ["latin"],
@@ -32,7 +30,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={cn(geistMono.variable, "font-sans", geist.variable)}
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
