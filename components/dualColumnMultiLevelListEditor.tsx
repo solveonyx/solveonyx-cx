@@ -1,7 +1,17 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { ChevronDown, ChevronRight, GripVertical, Pencil, Plus, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select"
 import { ListEditor } from "@/components/listEditor"
 import { useSortableList } from "@/hooks/useSortableList"
 import { cn } from "@/lib/utils"
@@ -280,7 +290,11 @@ export function DualColumnMultiLevelListEditor<
     }, [isAddingParent])
 
     if (sortedParents.length === 0 && !canAddParent) {
-        return <div className="rounded border p-4 text-sm text-muted-foreground">{emptyMessage}</div>
+        return (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+                {emptyMessage}
+            </div>
+        )
     }
 
     return (
@@ -306,7 +320,7 @@ export function DualColumnMultiLevelListEditor<
                     return (
                         <div key={parent.id} className="space-y-2">
                             {showGapBefore && (
-                                <div className="h-2 rounded border-2 border-dashed border-accent/70 bg-accent/20" />
+                                <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
                             )}
 
                             <div
@@ -316,14 +330,17 @@ export function DualColumnMultiLevelListEditor<
                                         : undefined
                                 }
                                 className={cn(
-                                    "rounded border p-3 transition-[transform,box-shadow,background-color,opacity]",
-                                    isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-70 shadow-lg will-change-transform !transition-none"
+                                    "rounded-lg border bg-card p-3 shadow-sm transition-[transform,box-shadow,background-color,opacity]",
+                                    !isDraggingRow && "hover:bg-muted/20",
+                                    isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                                 )}
                             >
                                 <div className="flex items-start gap-3">
                                     {showParentReorderHandle && (
-                                        <button
+                                        <Button
                                             type="button"
+                                            variant="ghost"
+                                            size="icon-sm"
                                             disabled={!parentReorderIsAvailable}
                                             onMouseDown={
                                                 parentReorderIsAvailable
@@ -333,14 +350,14 @@ export function DualColumnMultiLevelListEditor<
                                             }
                                             aria-label="Reorder row"
                                             className={cn(
-                                                "mt-1 rounded px-2 py-1 text-muted-foreground transition-colors",
+                                                "mt-1 text-muted-foreground",
                                                 parentReorderIsAvailable
                                                     ? "cursor-grab hover:text-foreground active:cursor-grabbing"
                                                     : "cursor-not-allowed opacity-30"
                                             )}
                                         >
-                                            &#8801;
-                                        </button>
+                                            <GripVertical />
+                                        </Button>
                                     )}
 
                                     <Button
@@ -349,54 +366,57 @@ export function DualColumnMultiLevelListEditor<
                                         size="sm"
                                         onClick={() => toggleExpanded(parent.id)}
                                         className="mt-0.5 w-8 px-0"
+                                        aria-label={isExpanded ? "Collapse row" : "Expand row"}
                                     >
-                                        {isExpanded ? "v" : ">"}
+                                        {isExpanded ? <ChevronDown /> : <ChevronRight />}
                                     </Button>
 
                                     <div className="min-w-0 flex-1">
                                         {isEditing ? (
                                             <div className="grid gap-2 md:grid-cols-2">
                                                 <div className="space-y-1">
-                                                    <label className="text-xs font-medium text-muted-foreground">
+                                                    <Label className="text-xs text-muted-foreground">
                                                         Name
-                                                    </label>
-                                                    <input
+                                                    </Label>
+                                                    <Input
                                                         type="text"
                                                         value={parentDraftName}
                                                         onChange={(event) =>
                                                             setParentDraftName(event.target.value)
                                                         }
-                                                        className="w-full rounded border p-2"
+                                                        className="w-full"
                                                     />
                                                 </div>
 
                                                 <div className="space-y-1">
-                                                    <label className="text-xs font-medium text-muted-foreground">
+                                                    <Label className="text-xs text-muted-foreground">
                                                         {secondaryColumn.label}
-                                                    </label>
+                                                    </Label>
                                                     {secondaryColumn.inputType === "select" ? (
-                                                        <select
+                                                        <Select
                                                             value={secondaryDraftValue}
-                                                            onChange={(event) =>
-                                                                setSecondaryDraftValue(event.target.value)
-                                                            }
-                                                            className="w-full rounded border p-2"
+                                                            onValueChange={setSecondaryDraftValue}
                                                         >
-                                                            {(secondaryColumn.options ?? []).map((option) => (
-                                                                <option key={option.value} value={option.value}>
-                                                                    {option.label}
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                            <SelectTrigger className="w-full">
+                                                                <SelectValue placeholder={secondaryColumn.placeholder} />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {(secondaryColumn.options ?? []).map((option) => (
+                                                                    <SelectItem key={option.value} value={option.value}>
+                                                                        {option.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
                                                     ) : (
-                                                        <input
+                                                        <Input
                                                             type="text"
                                                             value={secondaryDraftValue}
                                                             placeholder={secondaryColumn.placeholder}
                                                             onChange={(event) =>
                                                                 setSecondaryDraftValue(event.target.value)
                                                             }
-                                                            className="w-full rounded border p-2"
+                                                            className="w-full"
                                                         />
                                                     )}
                                                 </div>
@@ -418,6 +438,7 @@ export function DualColumnMultiLevelListEditor<
                                                 onClick={() => saveParent(parent)}
                                                 disabled={isSavingParent || !canSaveEditedParent}
                                             >
+                                                <Save />
                                                 {isSavingParent ? "Saving..." : "Save"}
                                             </Button>
                                             <Button
@@ -426,6 +447,7 @@ export function DualColumnMultiLevelListEditor<
                                                 onClick={cancelEditingParent}
                                                 disabled={isSavingParent}
                                             >
+                                                <X />
                                                 Cancel
                                             </Button>
                                         </div>
@@ -436,6 +458,7 @@ export function DualColumnMultiLevelListEditor<
                                             onClick={() => startEditingParent(parent)}
                                             disabled={!canStartParentAction || isCreatingParent}
                                         >
+                                            <Pencil />
                                             Edit
                                         </Button>
                                     ) : null}
@@ -443,7 +466,7 @@ export function DualColumnMultiLevelListEditor<
 
                                 {isExpanded && showChildren && !isDraggingRow && (
                                     <div className="ml-8 mt-3 border-l pl-4">
-                                        <ListEditor
+                                        <ListEditor<TChild>
                                             items={parent.children}
                                             sortField="displayOrder"
                                             editableField="name"
@@ -484,23 +507,24 @@ export function DualColumnMultiLevelListEditor<
                 {canReorderParents &&
                     parentSortable.isDragging &&
                     parentSortable.dropIndex === sortedParents.length && (
-                        <div className="h-2 rounded border-2 border-dashed border-accent/70 bg-accent/20" />
+                        <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
                     )}
             </div>
 
             {canAddParent && isAddingParent && (
-                <div className="flex items-center justify-between gap-3 rounded border p-3">
+                <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm">
                     <div className="min-w-0 flex-1">
-                        <input
+                        <Input
                             ref={newParentInputRef}
                             type="text"
                             value={newParentName}
                             onChange={(event) => setNewParentName(event.target.value)}
-                            className="w-full rounded border p-2"
+                            className="w-full"
                         />
                     </div>
                     <div className="flex items-center gap-2">
                         <Button onClick={saveNewParent} disabled={isCreatingParent || !canSaveNewParent}>
+                            <Save />
                             {isCreatingParent ? "Saving..." : "Save"}
                         </Button>
                         <Button
@@ -508,6 +532,7 @@ export function DualColumnMultiLevelListEditor<
                             onClick={cancelAddingParent}
                             disabled={isCreatingParent}
                         >
+                            <X />
                             Cancel
                         </Button>
                     </div>
@@ -520,6 +545,7 @@ export function DualColumnMultiLevelListEditor<
                     onClick={startAddingParent}
                     disabled={isCreatingParent || !canStartParentAction}
                 >
+                    <Plus />
                     {addParentLabel}
                 </Button>
             )}

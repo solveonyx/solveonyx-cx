@@ -2,6 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow
+} from "@/components/ui/table"
 import {
     DisplayOrderRepairSummary,
     fetchProductLines,
@@ -155,17 +175,20 @@ export default function DisplayOrderAdminPage() {
     }
 
     return (
-        <div className="mx-auto max-w-3xl space-y-8 p-6">
+        <div className="mx-auto max-w-4xl space-y-6 p-6">
             <div>
-                <h1 className="text-xl font-semibold">Display Order Repair</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Display Order Repair</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                     Re-sequence display order values to remove duplicates, gaps, and null issues.
                 </p>
             </div>
 
-            <section className="space-y-3 rounded border p-4">
-                <h2 className="font-medium">No-Argument Actions</h2>
-                <div className="flex flex-wrap gap-3">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Product Display Order</CardTitle>
+                    <CardDescription>Repair ordering across all products.</CardDescription>
+                </CardHeader>
+                <CardContent>
                     <Button
                         variant="outline"
                         onClick={runReestablishProducts}
@@ -173,111 +196,151 @@ export default function DisplayOrderAdminPage() {
                     >
                         {isRunningProducts ? "Running..." : "Re-establish Products"}
                     </Button>
-                </div>
-            </section>
+                </CardContent>
+            </Card>
 
-            <section className="space-y-3 rounded border p-4">
-                <h2 className="font-medium">Scoped Product-Line Re-sort</h2>
-                <div className="space-y-1">
-                    <label htmlFor="productForLines" className="block text-sm font-medium">
-                        Product
-                    </label>
-                    <select
-                        id="productForLines"
+            <Card>
+                <CardHeader>
+                    <CardTitle>Product-Line Display Order</CardTitle>
+                    <CardDescription>Repair product lines for a selected product.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="space-y-2">
+                        <Label htmlFor="productForLines">Product</Label>
+                        <Select
                         value={selectedProductIdForLines}
-                        onChange={(event) => setSelectedProductIdForLines(event.target.value)}
+                        onValueChange={setSelectedProductIdForLines}
                         disabled={isLoadingProducts}
-                        className="w-full rounded border p-2"
                     >
-                        <option value="">Select product</option>
-                        {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                                {product.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <Button onClick={runReestablishProductLines} disabled={isRunningProductLines}>
-                    {isRunningProductLines ? "Running..." : "Re-establish Product Lines"}
-                </Button>
-            </section>
+                            <SelectTrigger id="productForLines" className="w-full">
+                                <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {products.map((product) => (
+                                    <SelectItem key={product.id} value={product.id}>
+                                        {product.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button onClick={runReestablishProductLines} disabled={isRunningProductLines}>
+                        {isRunningProductLines ? "Running..." : "Re-establish Product Lines"}
+                    </Button>
+                </CardContent>
+            </Card>
 
-            <section className="space-y-3 rounded border p-4">
-                <h2 className="font-medium">Scoped Model Re-sort</h2>
-                <div className="space-y-1">
-                    <label htmlFor="productForModels" className="block text-sm font-medium">
-                        Product
-                    </label>
-                    <select
-                        id="productForModels"
-                        value={selectedProductIdForModels}
-                        onChange={(event) => setSelectedProductIdForModels(event.target.value)}
-                        disabled={isLoadingProducts}
-                        className="w-full rounded border p-2"
-                    >
-                        <option value="">Select product</option>
-                        {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                                {product.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div className="space-y-1">
-                    <label htmlFor="productLineForModels" className="block text-sm font-medium">
-                        Product Line
-                    </label>
-                    <select
-                        id="productLineForModels"
-                        value={selectedProductLineId}
-                        onChange={(event) => setSelectedProductLineId(event.target.value)}
-                        disabled={!selectedProductIdForModels || isLoadingProductLines}
-                        className="w-full rounded border p-2"
-                    >
-                        <option value="">Select product line</option>
-                        {productLines.map((line) => (
-                            <option key={line.id} value={line.id}>
-                                {line.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <Button onClick={runReestablishModels} disabled={isRunningModels}>
-                    {isRunningModels ? "Running..." : "Re-establish Models"}
-                </Button>
-            </section>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Model Display Order</CardTitle>
+                    <CardDescription>Repair models within a selected product line.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="space-y-2">
+                        <Label htmlFor="productForModels">Product</Label>
+                        <Select
+                            value={selectedProductIdForModels}
+                            onValueChange={setSelectedProductIdForModels}
+                            disabled={isLoadingProducts}
+                        >
+                            <SelectTrigger id="productForModels" className="w-full">
+                                <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {products.map((product) => (
+                                    <SelectItem key={product.id} value={product.id}>
+                                        {product.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="productLineForModels">Product Line</Label>
+                        <Select
+                            value={selectedProductLineId}
+                            onValueChange={setSelectedProductLineId}
+                            disabled={!selectedProductIdForModels || isLoadingProductLines}
+                        >
+                            <SelectTrigger id="productLineForModels" className="w-full">
+                                <SelectValue placeholder="Select product line" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {productLines.map((line) => (
+                                    <SelectItem key={line.id} value={line.id}>
+                                        {line.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button onClick={runReestablishModels} disabled={isRunningModels}>
+                        {isRunningModels ? "Running..." : "Re-establish Models"}
+                    </Button>
+                </CardContent>
+            </Card>
 
-            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertTitle>Display order issue</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
 
-            <section className="space-y-3 rounded border p-4">
-                <h2 className="font-medium">Recent Results</h2>
-                {results.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No repair runs yet.</p>
-                )}
-                {results.map((result, index) => (
-                    <div key={`${result.timestamp}-${index}`} className="rounded border p-3">
-                        <div className="text-sm font-medium">{result.label}</div>
-                        <div className="text-xs text-muted-foreground">{result.timestamp}</div>
-                        <div className="mt-2 space-y-1 text-sm">
-                            {result.summaries.map((summary) => (
-                                <div key={`${summary.entity}-${result.timestamp}`}>
-                                    {summary.entity}: scanned {summary.scanned}, updated {summary.updated}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Recent Results</CardTitle>
+                    <CardDescription>Latest repair runs and their update counts.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {results.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No repair runs yet.</p>
+                    )}
+                    {results.length > 0 && (
+                        <div className="space-y-4">
+                            {results.map((result, index) => (
+                                <div key={`${result.timestamp}-${index}`} className="space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <div className="text-sm font-medium">{result.label}</div>
+                                        <Badge variant="outline">{result.timestamp}</Badge>
+                                    </div>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Entity</TableHead>
+                                                <TableHead>Scanned</TableHead>
+                                                <TableHead>Updated</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {result.summaries.map((summary) => (
+                                                <TableRow key={`${summary.entity}-${result.timestamp}`}>
+                                                    <TableCell>{summary.entity}</TableCell>
+                                                    <TableCell>{summary.scanned}</TableCell>
+                                                    <TableCell>{summary.updated}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                    <Separator />
                                 </div>
                             ))}
                         </div>
-                    </div>
-                ))}
-            </section>
+                    )}
+                </CardContent>
+            </Card>
 
             {(selectedProductForModelScope || selectedLineForModelScope) && (
-                <section className="rounded border p-4 text-sm text-muted-foreground">
+                <Card>
+                    <CardContent className="space-y-1 pt-4 text-sm text-muted-foreground">
                     {selectedProductForModelScope && (
                         <div>Model scope product: {selectedProductForModelScope.name}</div>
                     )}
                     {selectedLineForModelScope && (
                         <div>Model scope line: {selectedLineForModelScope.name}</div>
                     )}
-                </section>
+                    </CardContent>
+                </Card>
             )}
         </div>
     )

@@ -1,20 +1,18 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { GripVertical, Pencil, Plus, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useSortableList } from "@/hooks/useSortableList"
 import { cn } from "@/lib/utils"
 
 type EditableValue = string | number | null | undefined
 
-type EditableFieldKey<T> = {
-    [K in keyof T]-?: T[K] extends EditableValue ? K : never
-}[keyof T]
-
 type ListEditorProps<T extends { id: string }> = {
     items: T[]
-    sortField: EditableFieldKey<T>
-    editableField: EditableFieldKey<T>
+    sortField: keyof T
+    editableField: keyof T
     onSave?: (row: T, newValue: string) => Promise<void>
     onCreate?: (newValue: string) => Promise<void>
     interactionLocked?: boolean
@@ -163,7 +161,11 @@ export function ListEditor<T extends { id: string }>({
     }, [hasLocalActiveEditor, onActiveStateChange])
 
     if (sortedItems.length === 0 && !canAdd) {
-        return <div className="rounded border p-4 text-sm text-muted-foreground">{emptyMessage}</div>
+        return (
+            <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+                {emptyMessage}
+            </div>
+        )
     }
 
     return (
@@ -183,20 +185,23 @@ export function ListEditor<T extends { id: string }>({
                 return (
                     <div key={row.id} className="space-y-2">
                         {showGapBefore && (
-                            <div className="h-2 rounded border-2 border-dashed border-accent/70 bg-accent/20" />
+                            <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
                         )}
 
                         <div
                             ref={canReorder ? (node) => sortable.setItemElement(row.id, node) : undefined}
                             className={cn(
-                                "flex items-center justify-between gap-3 rounded border p-3 transition-[transform,box-shadow,background-color,opacity]",
-                                isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-70 shadow-lg will-change-transform !transition-none"
+                                "flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm transition-[transform,box-shadow,background-color,opacity]",
+                                !isDraggingRow && "hover:bg-muted/30",
+                                isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                             )}
                         >
                             <div className={cn("min-w-0 flex-1", showReorderHandle && "flex items-center gap-3")}>
                                 {showReorderHandle && (
-                                    <button
+                                    <Button
                                         type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
                                         disabled={!canReorder}
                                         onMouseDown={
                                             canReorder
@@ -205,26 +210,26 @@ export function ListEditor<T extends { id: string }>({
                                         }
                                         aria-label="Reorder row"
                                         className={cn(
-                                            "rounded px-2 py-1 text-muted-foreground transition-colors",
+                                            "text-muted-foreground",
                                             canReorder
                                                 ? "cursor-grab hover:text-foreground active:cursor-grabbing"
                                                 : "cursor-not-allowed opacity-30"
                                         )}
                                     >
-                                        &#8801;
-                                    </button>
+                                        <GripVertical />
+                                    </Button>
                                 )}
 
                                 <div className="min-w-0 flex-1">
                                     {isEditing ? (
-                                        <input
+                                        <Input
                                             type="text"
                                             value={draftValue}
                                             onChange={(event) => setDraftValue(event.target.value)}
-                                            className="w-full rounded border p-2"
+                                            className="w-full"
                                         />
                                     ) : (
-                                        <div className="truncate">
+                                        <div className="truncate text-sm font-medium">
                                             {String((row[editableField] as EditableValue) ?? "")}
                                         </div>
                                     )}
@@ -237,9 +242,11 @@ export function ListEditor<T extends { id: string }>({
                                         onClick={() => saveRow(row)}
                                         disabled={isSaving || !canSaveEditedRow}
                                     >
+                                        <Save />
                                         {isSaving ? "Saving..." : "Save"}
                                     </Button>
                                     <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
+                                        <X />
                                         Cancel
                                     </Button>
                                 </div>
@@ -249,6 +256,7 @@ export function ListEditor<T extends { id: string }>({
                                     onClick={() => startEditing(row)}
                                     disabled={!canStartNewAction}
                                 >
+                                    <Pencil />
                                     Edit
                                 </Button>
                             ) : null}
@@ -260,25 +268,27 @@ export function ListEditor<T extends { id: string }>({
             {canReorder &&
                 sortable.isDragging &&
                 sortable.dropIndex === sortedItems.length && (
-                    <div className="h-2 rounded border-2 border-dashed border-accent/70 bg-accent/20" />
+                    <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
                 )}
 
             {canAdd && isAdding && (
-                <div className="flex items-center justify-between gap-3 rounded border p-3">
+                <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm">
                     <div className="min-w-0 flex-1">
-                        <input
+                        <Input
                             ref={newRowInputRef}
                             type="text"
                             value={newDraftValue}
                             onChange={(event) => setNewDraftValue(event.target.value)}
-                            className="w-full rounded border p-2"
+                            className="w-full"
                         />
                     </div>
                     <div className="flex items-center gap-2">
                         <Button onClick={saveNewRow} disabled={isSaving || !canSaveNewRow}>
+                            <Save />
                             {isSaving ? "Saving..." : "Save"}
                         </Button>
                         <Button variant="outline" onClick={cancelAdding} disabled={isSaving}>
+                            <X />
                             Cancel
                         </Button>
                     </div>
@@ -291,6 +301,7 @@ export function ListEditor<T extends { id: string }>({
                     onClick={startAdding}
                     disabled={isSaving || !canStartNewAction}
                 >
+                    <Plus />
                     {addButtonLabel}
                 </Button>
             )}

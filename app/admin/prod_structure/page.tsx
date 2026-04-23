@@ -1,6 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { fetchProductHierarchy } from "@/services/productHierarchyService"
 import { fetchProducts } from "@/services/productService"
 import { Product } from "@/types"
@@ -58,55 +71,97 @@ export default function ProductHierarchyPage() {
     }, [selectedProductId])
 
     return (
-        <div className="p-6 space-y-6">
-            <h1 className="text-xl font-bold">Product Hierarchy</h1>
-
-            <div className="space-y-1">
-                <label htmlFor="productId" className="block text-sm font-medium">
-                    Product
-                </label>
-                <select
-                    id="productId"
-                    value={selectedProductId}
-                    onChange={(event) => setSelectedProductId(event.target.value)}
-                    disabled={isLoadingProducts || products.length === 0}
-                    className="w-full max-w-sm rounded border p-2"
-                >
-                    {products.map((product) => (
-                        <option key={product.id} value={product.id}>
-                            {product.name}
-                        </option>
-                    ))}
-                </select>
+        <div className="mx-auto max-w-4xl space-y-5 p-6">
+            <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Product Hierarchy</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Review product lines and models in their display order.
+                </p>
             </div>
 
-            {!selectedProductId && !isLoadingProducts && <div>No products found</div>}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Product</CardTitle>
+                    <CardDescription>Select a product to inspect its hierarchy.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    <Label htmlFor="productId">Product</Label>
+                    <Select
+                        value={selectedProductId}
+                        onValueChange={setSelectedProductId}
+                        disabled={isLoadingProducts || products.length === 0}
+                    >
+                        <SelectTrigger id="productId" className="w-full max-w-sm">
+                            <SelectValue placeholder="Select a product" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                    {product.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </CardContent>
+            </Card>
 
-            {isLoadingHierarchy && (
-                <p className="text-sm text-muted-foreground">Loading product hierarchy...</p>
+            {!selectedProductId && !isLoadingProducts && (
+                <Alert>
+                    <AlertTitle>No products found</AlertTitle>
+                    <AlertDescription>Create a product before reviewing its hierarchy.</AlertDescription>
+                </Alert>
             )}
 
-            {!isLoadingHierarchy && hierarchy.length > 0 && (
-                <div className="space-y-2">
-                    {hierarchy.map((line) => (
-                        <div key={line.id} className="ml-4 mt-2">
-                            <div className="font-medium">{line.name}</div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Hierarchy</CardTitle>
+                    <CardDescription>Product lines are shown with their nested models.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingHierarchy && (
+                        <div className="space-y-3">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-4/5" />
+                            <Skeleton className="h-12 w-3/5" />
+                        </div>
+                    )}
 
-                            {line.models.map((model) => (
-                                <div key={model.id} className="ml-4 text-sm">
-                                    {model.name}
+                    {!isLoadingHierarchy && hierarchy.length > 0 && (
+                        <div className="space-y-4">
+                            {hierarchy.map((line) => (
+                                <div key={line.id} className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="font-medium">{line.name}</div>
+                                        <Badge variant="secondary">{line.models.length} models</Badge>
+                                    </div>
+
+                                    {line.models.length > 0 && (
+                                        <div className="ml-4 space-y-2 border-l pl-4">
+                                            {line.models.map((model) => (
+                                                <div key={model.id} className="text-sm text-muted-foreground">
+                                                    {model.name}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <Separator />
                                 </div>
                             ))}
                         </div>
-                    ))}
-                </div>
-            )}
+                    )}
 
-            {!isLoadingHierarchy && selectedProductId && hierarchy.length === 0 && (
-                <p className="text-sm text-muted-foreground">No product lines found for this product.</p>
-            )}
+                    {!isLoadingHierarchy && selectedProductId && hierarchy.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No product lines found for this product.</p>
+                    )}
+                </CardContent>
+            </Card>
 
-            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertTitle>Product hierarchy issue</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
         </div>
     )
 }

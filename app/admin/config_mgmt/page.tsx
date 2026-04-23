@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { DualColumnMultiLevelListEditor } from "@/components/dualColumnMultiLevelListEditor"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { fetchConfigHierarchy } from "@/services/configurableHierarchyService"
 import {
     createConfig,
@@ -260,47 +264,62 @@ export default function ConfigurationManagementPage() {
     }
 
     return (
-        <div className="mx-auto max-w-4xl space-y-4 p-6">
-            <h1 className="text-xl font-semibold">Configuration Management</h1>
-            <p className="text-sm text-muted-foreground">
-                Edit configs and nested config options inline.
-            </p>
+        <div className="mx-auto max-w-5xl space-y-5 p-6">
+            <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Configuration Management</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Edit configs and nested config options inline.
+                </p>
+            </div>
 
-            {isLoading && (
-                <p className="text-sm text-muted-foreground">Loading configurations...</p>
-            )}
-
-            {!isLoading && (
-                <DualColumnMultiLevelListEditor
-                    items={configLines}
-                    secondaryColumn={{
-                        label: "Config Type",
-                        inputType: "select",
-                        getValue: (parent) => parent.configTypeId,
-                        getDisplayValue: (parent) => parent.configTypeName,
-                        options: configTypeOptions,
-                        onSave: saveConfigType
-                    }}
-                    onSaveParent={saveConfigName}
-                    onCreateParent={createConfigItem}
-                    onCreateChild={createOptionForConfig}
-                    onSaveChild={saveConfigOptionName}
-                    onReorderParents={reorderConfigs}
-                    onReorderChildren={reorderOptionsForConfig}
-                    onActiveStateChange={setIsEditorActive}
-                    addParentLabel="Add Config"
-                    addChildLabel="Add Option"
-                    emptyMessage="No configs found."
-                />
-            )}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Configs and Options</CardTitle>
+                    <CardDescription>Assign each config to a type and maintain its available options.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-16 w-full" />
+                            <Skeleton className="h-16 w-full" />
+                            <Skeleton className="h-8 w-32" />
+                        </div>
+                    ) : (
+                        <DualColumnMultiLevelListEditor
+                            items={configLines}
+                            secondaryColumn={{
+                                label: "Config Type",
+                                inputType: "select",
+                                getValue: (parent) => parent.configTypeId,
+                                getDisplayValue: (parent) => parent.configTypeName,
+                                options: configTypeOptions,
+                                onSave: saveConfigType
+                            }}
+                            onSaveParent={saveConfigName}
+                            onCreateParent={createConfigItem}
+                            onCreateChild={createOptionForConfig}
+                            onSaveChild={saveConfigOptionName}
+                            onReorderParents={reorderConfigs}
+                            onReorderChildren={reorderOptionsForConfig}
+                            onActiveStateChange={setIsEditorActive}
+                            addParentLabel="Add Config"
+                            addChildLabel="Add Option"
+                            emptyMessage="No configs found."
+                        />
+                    )}
+                </CardContent>
+            </Card>
 
             {isEditorActive && (
-                <p className="text-xs text-muted-foreground">
-                    Editing is active. Finish or cancel to unlock other actions.
-                </p>
+                <Badge variant="outline">Editing active. Finish or cancel to unlock other actions.</Badge>
             )}
 
-            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertTitle>Configuration issue</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
         </div>
     )
 }

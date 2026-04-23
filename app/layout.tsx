@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppSidebar } from "@/components/app-sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
@@ -33,8 +34,10 @@ export default function RootLayout({
       className={cn(geistMono.variable, "font-sans", geist.variable)}
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <AppSidebar />
-        <main className="min-h-screen pl-64">{children}</main>
+        <TooltipProvider>
+          <AppSidebar />
+          <main className="min-h-screen pl-64">{children}</main>
+        </TooltipProvider>
       </body>
     </html>
   );

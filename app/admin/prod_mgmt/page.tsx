@@ -2,6 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { MultiLevelListEditor } from "@/components/multiLevelListEditor"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { fetchProductHierarchy } from "@/services/productHierarchyService"
 import {
     createModel,
@@ -244,59 +256,82 @@ export default function ProductManagementPage() {
     }
 
     return (
-        <div className="mx-auto max-w-4xl space-y-4 p-6">
-            <h1 className="text-xl font-semibold">Product Management</h1>
-            <p className="text-sm text-muted-foreground">
-                Select a product, then edit product lines and nested models inline.
-            </p>
-
-            <div className="space-y-1">
-                <label htmlFor="productId" className="block text-sm font-medium">
-                    Product
-                </label>
-                <select
-                    id="productId"
-                    value={selectedProductId}
-                    onChange={(event) => setSelectedProductId(event.target.value)}
-                    disabled={isLoadingProducts || isEditorActive}
-                    className="w-full rounded border p-2"
-                >
-                    <option value="">Select a product</option>
-                    {products.map((product) => (
-                        <option key={product.id} value={product.id}>
-                            {product.name}
-                        </option>
-                    ))}
-                </select>
+        <div className="mx-auto max-w-5xl space-y-5 p-6">
+            <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Product Management</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Select a product, then edit product lines and nested models inline.
+                </p>
             </div>
 
-            {selectedProductName && (
-                <p className="text-sm text-muted-foreground">
-                    Showing product lines for: {selectedProductName}
-                </p>
-            )}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Product Scope</CardTitle>
+                    <CardDescription>Choose the product whose hierarchy you want to manage.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="space-y-2">
+                        <Label htmlFor="productId">Product</Label>
+                        <Select
+                            value={selectedProductId}
+                            onValueChange={setSelectedProductId}
+                            disabled={isLoadingProducts || isEditorActive}
+                        >
+                            <SelectTrigger id="productId" className="w-full">
+                                <SelectValue placeholder="Select a product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {products.map((product) => (
+                                    <SelectItem key={product.id} value={product.id}>
+                                        {product.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-            {isLoadingHierarchy && (
-                <p className="text-sm text-muted-foreground">Loading product hierarchy...</p>
-            )}
+                    {selectedProductName && (
+                        <Badge variant="secondary">Showing: {selectedProductName}</Badge>
+                    )}
+                </CardContent>
+            </Card>
 
-            {!isLoadingHierarchy && (
-                <MultiLevelListEditor
-                    items={productLines}
-                    onSaveParent={saveProductLineName}
-                    onCreateParent={createProductLineForProduct}
-                    onCreateChild={createModelForLine}
-                    onSaveChild={saveModelName}
-                    onReorderParents={reorderProductLines}
-                    onReorderChildren={reorderModelsForLine}
-                    onActiveStateChange={setIsEditorActive}
-                    addParentLabel="Add Product Line"
-                    addChildLabel="Add Model"
-                    emptyMessage="No product lines found for this product."
-                />
-            )}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Product Lines and Models</CardTitle>
+                    <CardDescription>Expand a line to edit its models. Collapse all rows to reorder product lines.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingHierarchy ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-14 w-full" />
+                            <Skeleton className="h-14 w-full" />
+                            <Skeleton className="h-8 w-40" />
+                        </div>
+                    ) : (
+                        <MultiLevelListEditor
+                            items={productLines}
+                            onSaveParent={saveProductLineName}
+                            onCreateParent={createProductLineForProduct}
+                            onCreateChild={createModelForLine}
+                            onSaveChild={saveModelName}
+                            onReorderParents={reorderProductLines}
+                            onReorderChildren={reorderModelsForLine}
+                            onActiveStateChange={setIsEditorActive}
+                            addParentLabel="Add Product Line"
+                            addChildLabel="Add Model"
+                            emptyMessage="No product lines found for this product."
+                        />
+                    )}
+                </CardContent>
+            </Card>
 
-            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertTitle>Product management issue</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
         </div>
     )
 }

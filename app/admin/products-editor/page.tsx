@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { ListEditor } from "@/components/listEditor"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { createProduct, fetchProducts, updateProduct } from "@/services/productService"
 import { Product } from "@/types"
 
@@ -49,26 +52,46 @@ export default function ProductListEditorPage() {
     }
 
     return (
-        <div className="mx-auto max-w-2xl space-y-4 p-6">
-            <h1 className="text-xl font-semibold">Product List Editor</h1>
-            <p className="text-sm text-muted-foreground">
-                Edit product names inline and save each row.
-            </p>
+        <div className="mx-auto max-w-3xl space-y-5 p-6">
+            <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Product List Editor</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Edit product names inline and save each row.
+                </p>
+            </div>
 
-            {isLoading && <p className="text-sm text-muted-foreground">Loading products...</p>}
-            {!isLoading && (
-                <ListEditor
-                    items={products}
-                    sortField="displayOrder"
-                    editableField="name"
-                    onSave={saveProductName}
-                    onCreate={createNewProduct}
-                    addButtonLabel="Add Product"
-                    emptyMessage="No products found."
-                />
+            <Card>
+                <CardHeader>
+                    <CardTitle>Products</CardTitle>
+                    <CardDescription>Maintain the top-level products shown across the admin tools.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-8 w-32" />
+                        </div>
+                    ) : (
+                        <ListEditor
+                            items={products}
+                            sortField="displayOrder"
+                            editableField="name"
+                            onSave={saveProductName}
+                            onCreate={createNewProduct}
+                            addButtonLabel="Add Product"
+                            emptyMessage="No products found."
+                        />
+                    )}
+                </CardContent>
+            </Card>
+
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertTitle>Unable to load products</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
             )}
-
-            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
         </div>
     )
 }
