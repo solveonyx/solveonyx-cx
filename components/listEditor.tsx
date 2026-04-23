@@ -146,8 +146,9 @@ export function ListEditor<T extends { id: string }>({
     const canSaveNewRow = newDraftValue.trim().length > 0
     const canSaveEditedRow = draftValue.trim().length > 0
     const canReorder = reorderEnabled && sortedItems.length > 1 && canStartNewAction && !isSaving
+    const showReorderHandle = reorderEnabled && sortedItems.length > 1
 
-    const sortable = useSortableList(sortedItems, reorder?.onReorder)
+    const sortable = useSortableList(sortedItems, reorder?.onReorder, canReorder)
 
     useEffect(() => {
         if (!isAdding) {
@@ -169,12 +170,6 @@ export function ListEditor<T extends { id: string }>({
         <div
             className="space-y-2"
             ref={canReorder ? sortable.setContainerElement : undefined}
-            onMouseMove={
-                canReorder
-                    ? (event) => sortable.handleMouseMove(event.nativeEvent)
-                    : undefined
-            }
-            onMouseUp={canReorder ? sortable.handleMouseUp : undefined}
         >
             {sortedItems.map((row, rowIndex) => {
                 const isEditing = editingId === row.id
@@ -193,26 +188,27 @@ export function ListEditor<T extends { id: string }>({
 
                         <div
                             ref={canReorder ? (node) => sortable.setItemElement(row.id, node) : undefined}
-                            onMouseEnter={canReorder ? () => sortable.handleMouseEnter(row.id) : undefined}
                             className={cn(
                                 "flex items-center justify-between gap-3 rounded border p-3 transition-[transform,box-shadow,background-color,opacity]",
-                                isDraggingRow && "relative z-20 bg-accent opacity-70 shadow-lg"
+                                isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-70 shadow-lg will-change-transform !transition-none"
                             )}
-                            style={
-                                isDraggingRow
-                                    ? { transform: `translateY(${sortable.dragOffsetY}px)`, pointerEvents: "none" }
-                                    : undefined
-                            }
                         >
-                            <div className={cn("min-w-0 flex-1", canReorder && "flex items-center gap-3")}>
-                                {canReorder && (
+                            <div className={cn("min-w-0 flex-1", showReorderHandle && "flex items-center gap-3")}>
+                                {showReorderHandle && (
                                     <button
                                         type="button"
-                                        onMouseDown={(event) => sortable.handleMouseDown(row.id, event.nativeEvent)}
+                                        disabled={!canReorder}
+                                        onMouseDown={
+                                            canReorder
+                                                ? (event) => sortable.handleMouseDown(row.id, event.nativeEvent)
+                                                : undefined
+                                        }
                                         aria-label="Reorder row"
                                         className={cn(
                                             "rounded px-2 py-1 text-muted-foreground transition-colors",
-                                            "cursor-grab active:cursor-grabbing hover:text-foreground"
+                                            canReorder
+                                                ? "cursor-grab hover:text-foreground active:cursor-grabbing"
+                                                : "cursor-not-allowed opacity-30"
                                         )}
                                     >
                                         &#8801;

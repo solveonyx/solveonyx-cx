@@ -209,14 +209,22 @@ export function MultiLevelListEditor<
     const canStartParentAction = !parentIsLocked && !hasLocalParentActiveEditor
     const canSaveNewParent = newParentName.trim().length > 0
     const canSaveEditedParent = parentDraftName.trim().length > 0
+    const hasExpandedParent = expandedParentIds.size > 0 || Boolean(visibleChildParentId)
+    const allParentsCollapsed = !hasExpandedParent
     const canReorderParents =
         Boolean(onReorderParents) &&
         sortedParents.length > 1 &&
+        allParentsCollapsed &&
         activeEditorKey === null &&
         !isSavingParent &&
         !isCreatingParent
+    const showParentReorderHandle = Boolean(onReorderParents) && sortedParents.length > 1
 
-    const parentSortable = useSortableList(sortedParents, onReorderParents)
+    const parentSortable = useSortableList(
+        sortedParents,
+        canReorderParents ? onReorderParents : undefined,
+        canReorderParents
+    )
 
     useEffect(() => {
         onActiveStateChange?.(activeEditorKey !== null)
@@ -252,20 +260,15 @@ export function MultiLevelListEditor<
             <div
                 className="space-y-3"
                 ref={canReorderParents ? parentSortable.setContainerElement : undefined}
-                onMouseMove={
-                    canReorderParents
-                        ? (event) => parentSortable.handleMouseMove(event.nativeEvent)
-                        : undefined
-                }
-                onMouseUp={canReorderParents ? parentSortable.handleMouseUp : undefined}
             >
                 {sortedParents.map((parent, rowIndex) => {
                     const isExpanded = expandedParentIds.has(parent.id)
                     const isEditing = editingParentId === parent.id
                     const showChildren = !visibleChildParentId || visibleChildParentId === parent.id
-                    const isDraggingRow = canReorderParents && parentSortable.draggingId === parent.id
+                    const parentReorderIsAvailable = canReorderParents
+                    const isDraggingRow = parentReorderIsAvailable && parentSortable.draggingId === parent.id
                     const showGapBefore =
-                        canReorderParents &&
+                        parentReorderIsAvailable &&
                         parentSortable.isDragging &&
                         parentSortable.dropIndex === rowIndex &&
                         parentSortable.draggingId !== parent.id
@@ -278,35 +281,33 @@ export function MultiLevelListEditor<
 
                             <div
                                 ref={
-                                    canReorderParents
+                                    parentReorderIsAvailable
                                         ? (node) => parentSortable.setItemElement(parent.id, node)
                                         : undefined
                                 }
-                                onMouseEnter={
-                                    canReorderParents ? () => parentSortable.handleMouseEnter(parent.id) : undefined
-                                }
                                 className={cn(
                                     "rounded border p-3 transition-[transform,box-shadow,background-color,opacity]",
-                                    isDraggingRow && "relative z-20 bg-accent opacity-70 shadow-lg"
+                                    isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-70 shadow-lg will-change-transform !transition-none"
                                 )}
-                                style={
-                                    isDraggingRow
-                                        ? {
-                                            transform: `translateY(${parentSortable.dragOffsetY}px)`,
-                                            pointerEvents: "none"
-                                        }
-                                        : undefined
-                                }
                             >
                                 <div className="flex items-center gap-3">
-                                    {canReorderParents && (
+                                    {showParentReorderHandle && (
                                         <button
                                             type="button"
-                                            onMouseDown={(event) =>
-                                                parentSortable.handleMouseDown(parent.id, event.nativeEvent)
+                                            disabled={!parentReorderIsAvailable}
+                                            onMouseDown={
+                                                parentReorderIsAvailable
+                                                    ? (event) =>
+                                                        parentSortable.handleMouseDown(parent.id, event.nativeEvent)
+                                                    : undefined
                                             }
                                             aria-label="Reorder row"
-                                            className="cursor-grab rounded px-2 py-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+                                            className={cn(
+                                                "rounded px-2 py-1 text-muted-foreground transition-colors",
+                                                parentReorderIsAvailable
+                                                    ? "cursor-grab hover:text-foreground active:cursor-grabbing"
+                                                    : "cursor-not-allowed opacity-30"
+                                            )}
                                         >
                                             &#8801;
                                         </button>
@@ -365,7 +366,7 @@ export function MultiLevelListEditor<
                                     ) : null}
                                 </div>
 
-                                {isExpanded && showChildren && (
+                                {isExpanded && showChildren && !isDraggingRow && (
                                     <div className="ml-8 mt-3 border-l pl-4">
                                         <ListEditor
                                             items={parent.children}
