@@ -6,7 +6,6 @@ import {
     DisplayOrderRepairSummary,
     fetchProductLines,
     fetchProducts,
-    reestablishAllDisplayOrders,
     reestablishModelDisplayOrder,
     reestablishProductDisplayOrder,
     reestablishProductLineDisplayOrder
@@ -29,7 +28,6 @@ export default function DisplayOrderAdminPage() {
     const [errorMessage, setErrorMessage] = useState("")
     const [isLoadingProducts, setIsLoadingProducts] = useState(true)
     const [isLoadingProductLines, setIsLoadingProductLines] = useState(false)
-    const [isRunningAll, setIsRunningAll] = useState(false)
     const [isRunningProducts, setIsRunningProducts] = useState(false)
     const [isRunningProductLines, setIsRunningProductLines] = useState(false)
     const [isRunningModels, setIsRunningModels] = useState(false)
@@ -102,20 +100,6 @@ export default function DisplayOrderAdminPage() {
         ])
     }
 
-    const runReestablishAll = async () => {
-        setErrorMessage("")
-        setIsRunningAll(true)
-        try {
-            const summaries = await reestablishAllDisplayOrders()
-            pushResult("Re-establish ALL display orders", summaries)
-        } catch (error) {
-            console.error("reestablishAllDisplayOrders failed:", error)
-            setErrorMessage("Failed to re-establish all display orders.")
-        } finally {
-            setIsRunningAll(false)
-        }
-    }
-
     const runReestablishProducts = async () => {
         setErrorMessage("")
         setIsRunningProducts(true)
@@ -182,9 +166,6 @@ export default function DisplayOrderAdminPage() {
             <section className="space-y-3 rounded border p-4">
                 <h2 className="font-medium">No-Argument Actions</h2>
                 <div className="flex flex-wrap gap-3">
-                    <Button onClick={runReestablishAll} disabled={isRunningAll}>
-                        {isRunningAll ? "Running..." : "Re-establish All"}
-                    </Button>
                     <Button
                         variant="outline"
                         onClick={runReestablishProducts}

@@ -1,0 +1,306 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { DualColumnMultiLevelListEditor } from "@/components/dualColumnMultiLevelListEditor"
+import { fetchConfigHierarchy } from "@/services/configurableHierarchyService"
+import {
+    createConfig,
+    createConfigOption,
+    fetchConfigTypes,
+    updateConfig,
+    updateConfigOption
+} from "@/services/configurableService"
+import { ConfigType, HierarchyEditorChild, HierarchyEditorParent } from "@/types"
+
+type ConfigMgmtChild = HierarchyEditorChild & {
+    configId: string
+}
+
+type ConfigMgmtParent = HierarchyEditorParent<ConfigMgmtChild> & {
+    configTypeId: string
+    configTypeName: string
+}
+
+function toEditorItems(
+    configHierarchy: Awaited<ReturnType<typeof fetchConfigHierarchy>>,
+    configTypeNameById: Map<string, string>
+): ConfigMgmtParent[] {
+    return configHierarchy.map((config) => ({
+        id: config.id,
+        configTypeId: config.configTypeId,
+        configTypeName: config.configTypeName ?? configTypeNameById.get(config.configTypeId) ?? "",
+        name: config.name,
+        displayOrder: config.displayOrder,
+        children: config.options.map((option) => ({
+            id: option.id,
+            configId: option.configId,
+            name: option.name,
+            displayOrder: option.displayOrder
+        }))
+    }))
+}
+
+export default function ConfigurationManagementPage() {
+    const [configLines, setConfigLines] = useState<ConfigMgmtParent[]>([])
+    const [configTypes, setConfigTypes] = useState<ConfigType[]>([])
+    const [defaultConfigTypeId, setDefaultConfigTypeId] = useState("")
+    const [isLoading, setIsLoading] = useState(true)
+    const [isEditorActive, setIsEditorActive] = useState(false)
+    const [errorMessage, setErrorMessage] = useState("")
+
+    useEffect(() => {
+        const loadData = async () => {
+            setErrorMessage("")
+            setIsLoading(true)
+
+            try {
+                const [configTypes, hierarchy] = await Promise.all([
+                    fetchConfigTypes(),
+                    fetchConfigHierarchy()
+                ])
+
+                const configTypeNameById = new Map(
+                    configTypes.map((configType) => [configType.id, configType.name])
+                )
+                setConfigLines(toEditorItems(hierarchy, configTypeNameById))
+                setConfigTypes(configTypes)
+                setDefaultConfigTypeId(configTypes[0]?.id ?? "")
+            } catch (error) {
+                console.error("Failed to load configuration hierarchy:", error)
+                setErrorMessage("Could not load configurations and options.")
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        loadData()
+    }, [])
+
+    const saveConfigName = async (line: ConfigMgmtParent, newName: string) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Config name cannot be empty.")
+        }
+
+        const updated = await updateConfig(line.id, { name: trimmedName })
+        setConfigLines((prev) =>
+            prev.map((item) =>
+                item.id === updated.id
+                    ? {
+                        ...item,
+                        name: updated.name,
+                        configTypeId: updated.configTypeId,
+                        configTypeName: item.configTypeName,
+                        displayOrder: updated.displayOrder
+                    }
+                    : item
+            )
+        )
+    }
+
+    const saveConfigType = async (line: ConfigMgmtParent, configTypeId: string) => {
+        if (!configTypeId) {
+            throw new Error("Config type is required.")
+        }
+
+        const updated = await updateConfig(line.id, { configTypeId })
+        const nextTypeName =
+            configTypeOptions.find((option) => option.value === configTypeId)?.label ?? line.configTypeName
+
+        setConfigLines((prev) =>
+            prev.map((item) =>
+                item.id === updated.id
+                    ? {
+                        ...item,
+                        configTypeId: updated.configTypeId,
+                        configTypeName: nextTypeName,
+                        name: updated.name,
+                        displayOrder: updated.displayOrder
+                    }
+                    : item
+            )
+        )
+    }
+
+    const saveConfigOptionName = async (
+        line: ConfigMgmtParent,
+        model: ConfigMgmtChild,
+        newName: string
+    ) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Option name cannot be empty.")
+        }
+
+        const updated = await updateConfigOption(model.id, { name: trimmedName })
+        setConfigLines((prev) =>
+            prev.map((item) => {
+                if (item.id !== line.id) {
+                    return item
+                }
+
+                return {
+                    ...item,
+                    children: item.children.map((m) =>
+                        m.id === updated.id
+                            ? {
+                                ...m,
+                                name: updated.name,
+                                configId: updated.configId,
+                                displayOrder: updated.displayOrder
+                            }
+                            : m
+                    )
+                }
+            })
+        )
+    }
+
+    const createOptionForConfig = async (line: ConfigMgmtParent, newName: string) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Option name cannot be empty.")
+        }
+
+        const created = await createConfigOption(line.id, trimmedName)
+        setConfigLines((prev) =>
+            prev.map((item) =>
+                item.id === line.id
+                    ? {
+                        ...item,
+                        children: [
+                            ...item.children,
+                            {
+                                id: created.id,
+                                configId: created.configId,
+                                name: created.name,
+                                displayOrder: created.displayOrder
+                            }
+                        ]
+                    }
+                    : item
+            )
+        )
+    }
+
+    const createConfigItem = async (newName: string) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Config name cannot be empty.")
+        }
+
+        if (!defaultConfigTypeId) {
+            throw new Error("No config type found. Create at least one config type first.")
+        }
+
+        const created = await createConfig(defaultConfigTypeId, trimmedName)
+        setConfigLines((prev) => [
+            ...prev,
+            {
+                id: created.id,
+                configTypeId: created.configTypeId,
+                configTypeName:
+                    configTypeOptions.find((option) => option.value === created.configTypeId)?.label ?? "",
+                name: created.name,
+                displayOrder: created.displayOrder,
+                children: []
+            }
+        ])
+    }
+
+    const configTypeOptions = configTypes.map((configType) => ({
+        value: configType.id,
+        label: configType.name
+    }))
+
+    const reorderConfigs = async (reorderedItems: ConfigMgmtParent[]) => {
+        const previous = configLines
+        setConfigLines(reorderedItems)
+
+        try {
+            await Promise.all(
+                reorderedItems.map((line) =>
+                    updateConfig(line.id, { displayOrder: line.displayOrder })
+                )
+            )
+        } catch (error) {
+            console.error("Failed to reorder configs:", error)
+            setErrorMessage("Unable to save config order.")
+            setConfigLines(previous)
+        }
+    }
+
+    const reorderOptionsForConfig = async (
+        line: ConfigMgmtParent,
+        reorderedModels: ConfigMgmtChild[]
+    ) => {
+        const previous = configLines
+        setConfigLines((prev) =>
+            prev.map((item) =>
+                item.id === line.id
+                    ? {
+                        ...item,
+                        children: reorderedModels
+                    }
+                    : item
+            )
+        )
+
+        try {
+            await Promise.all(
+                reorderedModels.map((model) =>
+                    updateConfigOption(model.id, { displayOrder: model.displayOrder })
+                )
+            )
+        } catch (error) {
+            console.error("Failed to reorder config options:", error)
+            setErrorMessage("Unable to save option order.")
+            setConfigLines(previous)
+        }
+    }
+
+    return (
+        <div className="mx-auto max-w-4xl space-y-4 p-6">
+            <h1 className="text-xl font-semibold">Configuration Management</h1>
+            <p className="text-sm text-muted-foreground">
+                Edit configs and nested config options inline.
+            </p>
+
+            {isLoading && (
+                <p className="text-sm text-muted-foreground">Loading configurations...</p>
+            )}
+
+            {!isLoading && (
+                <DualColumnMultiLevelListEditor
+                    items={configLines}
+                    secondaryColumn={{
+                        label: "Config Type",
+                        inputType: "select",
+                        getValue: (parent) => parent.configTypeId,
+                        getDisplayValue: (parent) => parent.configTypeName,
+                        options: configTypeOptions,
+                        onSave: saveConfigType
+                    }}
+                    onSaveParent={saveConfigName}
+                    onCreateParent={createConfigItem}
+                    onCreateChild={createOptionForConfig}
+                    onSaveChild={saveConfigOptionName}
+                    onReorderParents={reorderConfigs}
+                    onReorderChildren={reorderOptionsForConfig}
+                    onActiveStateChange={setIsEditorActive}
+                    addParentLabel="Add Config"
+                    addChildLabel="Add Option"
+                    emptyMessage="No configs found."
+                />
+            )}
+
+            {isEditorActive && (
+                <p className="text-xs text-muted-foreground">
+                    Editing is active. Finish or cancel to unlock other actions.
+                </p>
+            )}
+
+            {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+        </div>
+    )
+}

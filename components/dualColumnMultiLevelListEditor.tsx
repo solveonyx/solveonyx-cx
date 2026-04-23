@@ -7,11 +7,27 @@ import { useSortableList } from "@/hooks/useSortableList"
 import { cn } from "@/lib/utils"
 import { HierarchyEditorChild, HierarchyEditorParent } from "@/types"
 
-type MultiLevelListEditorProps<
+type SecondaryOption = {
+    label: string
+    value: string
+}
+
+type ParentSecondaryColumn<TParent> = {
+    label: string
+    getValue: (parent: TParent) => string
+    getDisplayValue?: (parent: TParent) => string
+    onSave?: (parent: TParent, value: string) => Promise<void>
+    inputType?: "text" | "select"
+    options?: SecondaryOption[]
+    placeholder?: string
+}
+
+type DualColumnMultiLevelListEditorProps<
     TChild extends HierarchyEditorChild,
     TParent extends HierarchyEditorParent<TChild>
 > = {
     items: TParent[]
+    secondaryColumn: ParentSecondaryColumn<TParent>
     onSaveParent?: (parent: TParent, newName: string) => Promise<void>
     onCreateParent?: (newName: string) => Promise<void>
     onSaveChild?: (parent: TParent, child: TChild, newName: string) => Promise<void>
@@ -29,11 +45,12 @@ function sortableDisplayOrder(value: number | null | undefined): number {
     return typeof value === "number" ? value : Number.POSITIVE_INFINITY
 }
 
-export function MultiLevelListEditor<
+export function DualColumnMultiLevelListEditor<
     TChild extends HierarchyEditorChild,
     TParent extends HierarchyEditorParent<TChild>
 >({
     items,
+    secondaryColumn,
     onSaveParent,
     onCreateParent,
     onCreateChild,
@@ -45,11 +62,12 @@ export function MultiLevelListEditor<
     emptyMessage = "No parent rows to display.",
     onReorderParents,
     onReorderChildren
-}: MultiLevelListEditorProps<TChild, TParent>) {
+}: DualColumnMultiLevelListEditorProps<TChild, TParent>) {
     const PARENT_LOCK_KEY = "parent"
     const [expandedParentIds, setExpandedParentIds] = useState<Set<string>>(new Set())
     const [editingParentId, setEditingParentId] = useState<string | null>(null)
     const [parentDraftName, setParentDraftName] = useState("")
+    const [secondaryDraftValue, setSecondaryDraftValue] = useState("")
     const [isSavingParent, setIsSavingParent] = useState(false)
     const [isAddingParent, setIsAddingParent] = useState(false)
     const [newParentName, setNewParentName] = useState("")
@@ -109,7 +127,7 @@ export function MultiLevelListEditor<
     }
 
     const startEditingParent = (parent: TParent) => {
-        if (!onSaveParent) {
+        if (!onSaveParent && !secondaryColumn.onSave) {
             return
         }
         if (activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY) {
@@ -122,13 +140,14 @@ export function MultiLevelListEditor<
         setActiveEditorKey(PARENT_LOCK_KEY)
         setEditingParentId(parent.id)
         setParentDraftName(parent.name)
+        setSecondaryDraftValue(secondaryColumn.getValue(parent))
         setIsAddingParent(false)
         setNewParentName("")
         setErrorMessage("")
     }
 
     const saveParent = async (parent: TParent) => {
-        if (!onSaveParent) {
+        if (!onSaveParent && !secondaryColumn.onSave) {
             return
         }
 
@@ -136,12 +155,19 @@ export function MultiLevelListEditor<
         setIsSavingParent(true)
 
         try {
-            await onSaveParent(parent, parentDraftName)
+            if (onSaveParent && parentDraftName !== parent.name) {
+                await onSaveParent(parent, parentDraftName)
+            }
+            if (secondaryColumn.onSave && secondaryDraftValue !== secondaryColumn.getValue(parent)) {
+                await secondaryColumn.onSave(parent, secondaryDraftValue)
+            }
+
             setEditingParentId(null)
             setParentDraftName("")
+            setSecondaryDraftValue("")
             setActiveEditorKey(null)
         } catch (error) {
-            console.error("MultiLevelListEditor parent save error:", error)
+            console.error("DualColumnMultiLevelListEditor parent save error:", error)
             setErrorMessage("Unable to save changes.")
         } finally {
             setIsSavingParent(false)
@@ -151,6 +177,7 @@ export function MultiLevelListEditor<
     const cancelEditingParent = () => {
         setEditingParentId(null)
         setParentDraftName("")
+        setSecondaryDraftValue("")
         setActiveEditorKey(null)
         setErrorMessage("")
     }
@@ -169,6 +196,7 @@ export function MultiLevelListEditor<
         setActiveEditorKey(PARENT_LOCK_KEY)
         setEditingParentId(null)
         setParentDraftName("")
+        setSecondaryDraftValue("")
         setIsAddingParent(true)
         setNewParentName("")
         setErrorMessage("")
@@ -188,7 +216,7 @@ export function MultiLevelListEditor<
             setNewParentName("")
             setActiveEditorKey(null)
         } catch (error) {
-            console.error("MultiLevelListEditor parent create error:", error)
+            console.error("DualColumnMultiLevelListEditor parent create error:", error)
             setErrorMessage("Unable to add item.")
         } finally {
             setIsCreatingParent(false)
@@ -202,7 +230,7 @@ export function MultiLevelListEditor<
         setErrorMessage("")
     }
 
-    const canEditParent = Boolean(onSaveParent)
+    const canEditParent = Boolean(onSaveParent || secondaryColumn.onSave)
     const canAddParent = Boolean(onCreateParent)
     const hasLocalParentActiveEditor = editingParentId !== null || isAddingParent
     const parentIsLocked = Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
@@ -269,6 +297,8 @@ export function MultiLevelListEditor<
                         parentSortable.isDragging &&
                         parentSortable.dropIndex === rowIndex &&
                         parentSortable.draggingId !== parent.id
+                    const secondaryDisplayValue =
+                        secondaryColumn.getDisplayValue?.(parent) ?? secondaryColumn.getValue(parent)
 
                     return (
                         <div key={parent.id} className="space-y-2">
@@ -298,7 +328,7 @@ export function MultiLevelListEditor<
                                         : undefined
                                 }
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-start gap-3">
                                     {canReorderParents && (
                                         <button
                                             type="button"
@@ -306,7 +336,7 @@ export function MultiLevelListEditor<
                                                 parentSortable.handleMouseDown(parent.id, event.nativeEvent)
                                             }
                                             aria-label="Reorder row"
-                                            className="cursor-grab rounded px-2 py-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+                                            className="mt-1 cursor-grab rounded px-2 py-1 text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
                                         >
                                             &#8801;
                                         </button>
@@ -317,26 +347,71 @@ export function MultiLevelListEditor<
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => toggleExpanded(parent.id)}
-                                        className="w-8 px-0"
+                                        className="mt-0.5 w-8 px-0"
                                     >
                                         {isExpanded ? "v" : ">"}
                                     </Button>
 
                                     <div className="min-w-0 flex-1">
                                         {isEditing ? (
-                                            <input
-                                                type="text"
-                                                value={parentDraftName}
-                                                onChange={(event) => setParentDraftName(event.target.value)}
-                                                className="w-full rounded border p-2"
-                                            />
+                                            <div className="grid gap-2 md:grid-cols-2">
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-medium text-muted-foreground">
+                                                        Name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={parentDraftName}
+                                                        onChange={(event) =>
+                                                            setParentDraftName(event.target.value)
+                                                        }
+                                                        className="w-full rounded border p-2"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-medium text-muted-foreground">
+                                                        {secondaryColumn.label}
+                                                    </label>
+                                                    {secondaryColumn.inputType === "select" ? (
+                                                        <select
+                                                            value={secondaryDraftValue}
+                                                            onChange={(event) =>
+                                                                setSecondaryDraftValue(event.target.value)
+                                                            }
+                                                            className="w-full rounded border p-2"
+                                                        >
+                                                            {(secondaryColumn.options ?? []).map((option) => (
+                                                                <option key={option.value} value={option.value}>
+                                                                    {option.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={secondaryDraftValue}
+                                                            placeholder={secondaryColumn.placeholder}
+                                                            onChange={(event) =>
+                                                                setSecondaryDraftValue(event.target.value)
+                                                            }
+                                                            className="w-full rounded border p-2"
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
                                         ) : (
-                                            <div className="truncate">{parent.name}</div>
+                                            <div className="space-y-1">
+                                                <div className="truncate font-medium">{parent.name}</div>
+                                                <div className="truncate text-sm text-muted-foreground">
+                                                    {secondaryDisplayValue || "N/A"}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
 
                                     {isEditing ? (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 pt-0.5">
                                             <Button
                                                 type="button"
                                                 onClick={() => saveParent(parent)}

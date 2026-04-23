@@ -1,12 +1,12 @@
 import { supabase } from "@/lib/supabase"
 import { normalizeDisplayOrders } from "@/lib/displayOrder"
-import { Product, ProductLine, ProductLineModel } from "@/types"
+import { Model, Product, ProductLine } from "@/types"
 
 // GET ALL PRODUCTS
 export async function fetchProducts(): Promise<Product[]> {
     const { data, error } = await supabase
-        .from("product")
-        .select("id, name, display_order")
+        .from("prod")
+        .select("id, prod_name, display_order")
         .order("display_order")
 
     if (error) {
@@ -16,7 +16,7 @@ export async function fetchProducts(): Promise<Product[]> {
 
     return (data ?? []).map((p) => ({
         id: p.id,
-        name: p.name,
+        name: p.prod_name,
         displayOrder: p.display_order
     }))
 }
@@ -24,9 +24,9 @@ export async function fetchProducts(): Promise<Product[]> {
 // CREATE PRODUCT
 export async function createProduct(name: string): Promise<Product> {
     const { data, error } = await supabase
-        .from("product")
-        .insert([{ name }])
-        .select("id, name, display_order")
+        .from("prod")
+        .insert([{ prod_name: name }])
+        .select("id, prod_name, display_order")
         .single()
 
     if (error) {
@@ -36,7 +36,7 @@ export async function createProduct(name: string): Promise<Product> {
 
     return {
         id: data.id,
-        name: data.name,
+        name: data.prod_name,
         displayOrder: data.display_order
     }
 }
@@ -52,12 +52,12 @@ export async function updateProduct(
     updates: UpdateProductInput
 ): Promise<Product> {
     const payload: {
-        name?: string
+        prod_name?: string
         display_order?: number | null
     } = {}
 
     if (updates.name !== undefined) {
-        payload.name = updates.name
+        payload.prod_name = updates.name
     }
 
     if (updates.displayOrder !== undefined) {
@@ -69,10 +69,10 @@ export async function updateProduct(
     }
 
     const { data, error } = await supabase
-        .from("product")
+        .from("prod")
         .update(payload)
         .eq("id", productId)
-        .select("id, name, display_order")
+        .select("id, prod_name, display_order")
         .single()
 
     if (error) {
@@ -82,7 +82,7 @@ export async function updateProduct(
 
     return {
         id: data.id,
-        name: data.name,
+        name: data.prod_name,
         displayOrder: data.display_order
     }
 }
@@ -90,9 +90,9 @@ export async function updateProduct(
 // GET PRODUCT LINES BY PRODUCT
 export async function fetchProductLines(productId: string): Promise<ProductLine[]> {
     const { data, error } = await supabase
-        .from("product_line")
-        .select("id, product_id, name, display_order")
-        .eq("product_id", productId)
+        .from("prod_line")
+        .select("id, prod_id, prod_line_name, display_order")
+        .eq("prod_id", productId)
         .order("display_order")
 
     if (error) {
@@ -102,8 +102,8 @@ export async function fetchProductLines(productId: string): Promise<ProductLine[
 
     return (data ?? []).map((pl) => ({
         id: pl.id,
-        productId: pl.product_id,
-        name: pl.name,
+        productId: pl.prod_id,
+        name: pl.prod_line_name,
         displayOrder: pl.display_order
     }))
 }
@@ -114,9 +114,9 @@ export async function createProductLine(
     name: string
 ): Promise<ProductLine> {
     const { count, error: countError } = await supabase
-        .from("product_line")
+        .from("prod_line")
         .select("id", { count: "exact", head: true })
-        .eq("product_id", productId)
+        .eq("prod_id", productId)
 
     if (countError) {
         console.error("createProductLine count error:", countError)
@@ -126,13 +126,13 @@ export async function createProductLine(
     const nextDisplayOrder = (count ?? 0) + 1
 
     const { data, error } = await supabase
-        .from("product_line")
+        .from("prod_line")
         .insert([{
-            product_id: productId,
-            name,
+            prod_id: productId,
+            prod_line_name: name,
             display_order: nextDisplayOrder
         }])
-        .select("id, product_id, name, display_order")
+        .select("id, prod_id, prod_line_name, display_order")
         .single()
 
     if (error) {
@@ -142,8 +142,8 @@ export async function createProductLine(
 
     return {
         id: data.id,
-        productId: data.product_id,
-        name: data.name,
+        productId: data.prod_id,
+        name: data.prod_line_name,
         displayOrder: data.display_order
     }
 }
@@ -160,17 +160,17 @@ export async function updateProductLine(
     updates: UpdateProductLineInput
 ): Promise<ProductLine> {
     const payload: {
-        product_id?: string
-        name?: string
+        prod_id?: string
+        prod_line_name?: string
         display_order?: number | null
     } = {}
 
     if (updates.productId !== undefined) {
-        payload.product_id = updates.productId
+        payload.prod_id = updates.productId
     }
 
     if (updates.name !== undefined) {
-        payload.name = updates.name
+        payload.prod_line_name = updates.name
     }
 
     if (updates.displayOrder !== undefined) {
@@ -182,10 +182,10 @@ export async function updateProductLine(
     }
 
     const { data, error } = await supabase
-        .from("product_line")
+        .from("prod_line")
         .update(payload)
         .eq("id", productLineId)
-        .select("id, product_id, name, display_order")
+        .select("id, prod_id, prod_line_name, display_order")
         .single()
 
     if (error) {
@@ -195,8 +195,8 @@ export async function updateProductLine(
 
     return {
         id: data.id,
-        productId: data.product_id,
-        name: data.name,
+        productId: data.prod_id,
+        name: data.prod_line_name,
         displayOrder: data.display_order
     }
 }
@@ -205,11 +205,11 @@ export async function updateProductLine(
 // GET MODELS BY PRODUCT LINE
 export async function fetchModels(
     productLineId: string
-): Promise<ProductLineModel[]> {
+): Promise<Model[]> {
     const { data, error } = await supabase
-        .from("product_line_model")
-        .select("id, product_line_id, name, display_order")
-        .eq("product_line_id", productLineId)
+        .from("model")
+        .select("id, prod_line_id, model_name, display_order")
+        .eq("prod_line_id", productLineId)
         .order("display_order")
 
     if (error) {
@@ -219,8 +219,8 @@ export async function fetchModels(
 
     return (data ?? []).map((m) => ({
         id: m.id,
-        productLineId: m.product_line_id,
-        name: m.name,
+        productLineId: m.prod_line_id,
+        name: m.model_name,
         displayOrder: m.display_order
     }))
 }
@@ -229,11 +229,11 @@ export async function fetchModels(
 export async function createModel(
     productLineId: string,
     name: string
-): Promise<ProductLineModel> {
+): Promise<Model> {
     const { count, error: countError } = await supabase
-        .from("product_line_model")
+        .from("model")
         .select("id", { count: "exact", head: true })
-        .eq("product_line_id", productLineId)
+        .eq("prod_line_id", productLineId)
 
     if (countError) {
         console.error("createModel count error:", countError)
@@ -243,13 +243,13 @@ export async function createModel(
     const nextDisplayOrder = (count ?? 0) + 1
 
     const { data, error } = await supabase
-        .from("product_line_model")
+        .from("model")
         .insert([{
-            product_line_id: productLineId,
-            name,
+            prod_line_id: productLineId,
+            model_name: name,
             display_order: nextDisplayOrder
         }])
-        .select("id, product_line_id, name, display_order")
+        .select("id, prod_line_id, model_name, display_order")
         .single()
 
     if (error) {
@@ -259,8 +259,8 @@ export async function createModel(
 
     return {
         id: data.id,
-        productLineId: data.product_line_id,
-        name: data.name,
+        productLineId: data.prod_line_id,
+        name: data.model_name,
         displayOrder: data.display_order
     }
 }
@@ -275,19 +275,19 @@ export type UpdateModelInput = {
 export async function updateModel(
     modelId: string,
     updates: UpdateModelInput
-): Promise<ProductLineModel> {
+): Promise<Model> {
     const payload: {
-        product_line_id?: string
-        name?: string
+        prod_line_id?: string
+        model_name?: string
         display_order?: number | null
     } = {}
 
     if (updates.productLineId !== undefined) {
-        payload.product_line_id = updates.productLineId
+        payload.prod_line_id = updates.productLineId
     }
 
     if (updates.name !== undefined) {
-        payload.name = updates.name
+        payload.model_name = updates.name
     }
 
     if (updates.displayOrder !== undefined) {
@@ -299,10 +299,10 @@ export async function updateModel(
     }
 
     const { data, error } = await supabase
-        .from("product_line_model")
+        .from("model")
         .update(payload)
         .eq("id", modelId)
-        .select("id, product_line_id, name, display_order")
+        .select("id, prod_line_id, model_name, display_order")
         .single()
 
     if (error) {
@@ -312,13 +312,13 @@ export async function updateModel(
 
     return {
         id: data.id,
-        productLineId: data.product_line_id,
-        name: data.name,
+        productLineId: data.prod_line_id,
+        name: data.model_name,
         displayOrder: data.display_order
     }
 }
 
-type DisplayOrderEntity = "product" | "product_line" | "product_line_model"
+type DisplayOrderEntity = "prod" | "prod_line" | "model"
 
 export type DisplayOrderRepairSummary = {
     entity: DisplayOrderEntity
@@ -354,7 +354,7 @@ async function applyDisplayOrderUpdates(
 
 export async function reestablishProductDisplayOrder(): Promise<DisplayOrderRepairSummary> {
     const { data, error } = await supabase
-        .from("product")
+        .from("prod")
         .select("id, display_order")
 
     if (error) {
@@ -376,10 +376,10 @@ export async function reestablishProductDisplayOrder(): Promise<DisplayOrderRepa
         .filter((row) => row.changed)
         .map((row) => ({ id: row.id, nextDisplayOrder: row.nextDisplayOrder }))
 
-    const updated = await applyDisplayOrderUpdates("product", changed)
+    const updated = await applyDisplayOrderUpdates("prod", changed)
 
     return {
-        entity: "product",
+        entity: "prod",
         scanned: rows.length,
         updated
     }
@@ -389,11 +389,11 @@ export async function reestablishProductLineDisplayOrder(
     productId?: string
 ): Promise<DisplayOrderRepairSummary> {
     let query = supabase
-        .from("product_line")
-        .select("id, product_id, display_order")
+        .from("prod_line")
+        .select("id, prod_id, display_order")
 
     if (productId) {
-        query = query.eq("product_id", productId)
+        query = query.eq("prod_id", productId)
     }
 
     const { data, error } = await query
@@ -405,24 +405,24 @@ export async function reestablishProductLineDisplayOrder(
 
     const rows = (data ?? []) as Array<{
         id: string
-        product_id: string
+        prod_id: string
         display_order: number | null
     }>
 
     const normalized = normalizeDisplayOrders(rows, {
         getId: (row) => row.id,
         getDisplayOrder: (row) => row.display_order,
-        getGroupKey: (row) => row.product_id
+        getGroupKey: (row) => row.prod_id
     })
 
     const changed = normalized
         .filter((row) => row.changed)
         .map((row) => ({ id: row.id, nextDisplayOrder: row.nextDisplayOrder }))
 
-    const updated = await applyDisplayOrderUpdates("product_line", changed)
+    const updated = await applyDisplayOrderUpdates("prod_line", changed)
 
     return {
-        entity: "product_line",
+        entity: "prod_line",
         scanned: rows.length,
         updated
     }
@@ -432,11 +432,11 @@ export async function reestablishModelDisplayOrder(
     productLineId?: string
 ): Promise<DisplayOrderRepairSummary> {
     let query = supabase
-        .from("product_line_model")
-        .select("id, product_line_id, display_order")
+        .from("model")
+        .select("id, prod_line_id, display_order")
 
     if (productLineId) {
-        query = query.eq("product_line_id", productLineId)
+        query = query.eq("prod_line_id", productLineId)
     }
 
     const { data, error } = await query
@@ -448,24 +448,24 @@ export async function reestablishModelDisplayOrder(
 
     const rows = (data ?? []) as Array<{
         id: string
-        product_line_id: string
+        prod_line_id: string
         display_order: number | null
     }>
 
     const normalized = normalizeDisplayOrders(rows, {
         getId: (row) => row.id,
         getDisplayOrder: (row) => row.display_order,
-        getGroupKey: (row) => row.product_line_id
+        getGroupKey: (row) => row.prod_line_id
     })
 
     const changed = normalized
         .filter((row) => row.changed)
         .map((row) => ({ id: row.id, nextDisplayOrder: row.nextDisplayOrder }))
 
-    const updated = await applyDisplayOrderUpdates("product_line_model", changed)
+    const updated = await applyDisplayOrderUpdates("model", changed)
 
     return {
-        entity: "product_line_model",
+        entity: "model",
         scanned: rows.length,
         updated
     }

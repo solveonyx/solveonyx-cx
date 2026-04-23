@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { useSortableList } from "@/hooks/useSortableList"
+import { cn } from "@/lib/utils"
 
 type EditableValue = string | number | null | undefined
 
@@ -19,6 +21,9 @@ type ListEditorProps<T extends { id: string }> = {
     onActiveStateChange?: (isActive: boolean) => void
     addButtonLabel?: string
     emptyMessage?: string
+    reorder?: {
+        onReorder: (items: T[]) => void
+    }
 }
 
 function toSortable(value: EditableValue): string | number {
@@ -37,7 +42,8 @@ export function ListEditor<T extends { id: string }>({
     interactionLocked = false,
     onActiveStateChange,
     addButtonLabel = "Add",
-    emptyMessage = "No rows to display."
+    emptyMessage = "No rows to display.",
+    reorder
 }: ListEditorProps<T>) {
     const [editingId, setEditingId] = useState<string | null>(null)
     const [draftValue, setDraftValue] = useState("")
@@ -134,10 +140,14 @@ export function ListEditor<T extends { id: string }>({
 
     const canAdd = Boolean(onCreate)
     const canEdit = Boolean(onSave)
+    const reorderEnabled = Boolean(reorder?.onReorder)
     const hasLocalActiveEditor = editingId !== null || isAdding
     const canStartNewAction = !interactionLocked && !hasLocalActiveEditor
     const canSaveNewRow = newDraftValue.trim().length > 0
     const canSaveEditedRow = draftValue.trim().length > 0
+    const canReorder = reorderEnabled && sortedItems.length > 1 && canStartNewAction && !isSaving
+
+    const sortable = useSortableList(sortedItems, reorder?.onReorder)
 
     useEffect(() => {
         if (!isAdding) {
@@ -156,54 +166,106 @@ export function ListEditor<T extends { id: string }>({
     }
 
     return (
-        <div className="space-y-2">
-            {sortedItems.map((row) => {
+        <div
+            className="space-y-2"
+            ref={canReorder ? sortable.setContainerElement : undefined}
+            onMouseMove={
+                canReorder
+                    ? (event) => sortable.handleMouseMove(event.nativeEvent)
+                    : undefined
+            }
+            onMouseUp={canReorder ? sortable.handleMouseUp : undefined}
+        >
+            {sortedItems.map((row, rowIndex) => {
                 const isEditing = editingId === row.id
+                const isDraggingRow = canReorder && sortable.draggingId === row.id
+                const showGapBefore =
+                    canReorder &&
+                    sortable.isDragging &&
+                    sortable.dropIndex === rowIndex &&
+                    sortable.draggingId !== row.id
 
                 return (
-                    <div
-                        key={row.id}
-                        className="flex items-center justify-between gap-3 rounded border p-3"
-                    >
-                        <div className="min-w-0 flex-1">
-                            {isEditing ? (
-                                <input
-                                    type="text"
-                                    value={draftValue}
-                                    onChange={(event) => setDraftValue(event.target.value)}
-                                    className="w-full rounded border p-2"
-                                />
-                            ) : (
-                                <div className="truncate">
-                                    {String((row[editableField] as EditableValue) ?? "")}
-                                </div>
-                            )}
-                        </div>
+                    <div key={row.id} className="space-y-2">
+                        {showGapBefore && (
+                            <div className="h-2 rounded border-2 border-dashed border-accent/70 bg-accent/20" />
+                        )}
 
-                        {isEditing ? (
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    onClick={() => saveRow(row)}
-                                    disabled={isSaving || !canSaveEditedRow}
-                                >
-                                    {isSaving ? "Saving..." : "Save"}
-                                </Button>
-                                <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
-                                    Cancel
-                                </Button>
+                        <div
+                            ref={canReorder ? (node) => sortable.setItemElement(row.id, node) : undefined}
+                            onMouseEnter={canReorder ? () => sortable.handleMouseEnter(row.id) : undefined}
+                            className={cn(
+                                "flex items-center justify-between gap-3 rounded border p-3 transition-[transform,box-shadow,background-color,opacity]",
+                                isDraggingRow && "relative z-20 bg-accent opacity-70 shadow-lg"
+                            )}
+                            style={
+                                isDraggingRow
+                                    ? { transform: `translateY(${sortable.dragOffsetY}px)`, pointerEvents: "none" }
+                                    : undefined
+                            }
+                        >
+                            <div className={cn("min-w-0 flex-1", canReorder && "flex items-center gap-3")}>
+                                {canReorder && (
+                                    <button
+                                        type="button"
+                                        onMouseDown={(event) => sortable.handleMouseDown(row.id, event.nativeEvent)}
+                                        aria-label="Reorder row"
+                                        className={cn(
+                                            "rounded px-2 py-1 text-muted-foreground transition-colors",
+                                            "cursor-grab active:cursor-grabbing hover:text-foreground"
+                                        )}
+                                    >
+                                        &#8801;
+                                    </button>
+                                )}
+
+                                <div className="min-w-0 flex-1">
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            value={draftValue}
+                                            onChange={(event) => setDraftValue(event.target.value)}
+                                            className="w-full rounded border p-2"
+                                        />
+                                    ) : (
+                                        <div className="truncate">
+                                            {String((row[editableField] as EditableValue) ?? "")}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        ) : canEdit ? (
-                            <Button
-                                variant="outline"
-                                onClick={() => startEditing(row)}
-                                disabled={!canStartNewAction}
-                            >
-                                Edit
-                            </Button>
-                        ) : null}
+
+                            {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        onClick={() => saveRow(row)}
+                                        disabled={isSaving || !canSaveEditedRow}
+                                    >
+                                        {isSaving ? "Saving..." : "Save"}
+                                    </Button>
+                                    <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
+                                        Cancel
+                                    </Button>
+                                </div>
+                            ) : canEdit ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => startEditing(row)}
+                                    disabled={!canStartNewAction}
+                                >
+                                    Edit
+                                </Button>
+                            ) : null}
+                        </div>
                     </div>
                 )
             })}
+
+            {canReorder &&
+                sortable.isDragging &&
+                sortable.dropIndex === sortedItems.length && (
+                    <div className="h-2 rounded border-2 border-dashed border-accent/70 bg-accent/20" />
+                )}
 
             {canAdd && isAdding && (
                 <div className="flex items-center justify-between gap-3 rounded border p-3">

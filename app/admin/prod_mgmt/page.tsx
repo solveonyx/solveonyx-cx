@@ -10,13 +10,36 @@ import {
     updateModel,
     updateProductLine
 } from "@/services/productService"
-import { Product } from "@/types"
+import { HierarchyEditorChild, HierarchyEditorParent, Product } from "@/types"
 import { ProductLineWithModels } from "@/types/productHierarchy"
 
-export default function HierarchyEditorPage() {
+type ProductMgmtChild = HierarchyEditorChild & {
+    productLineId: string
+}
+
+type ProductMgmtParent = HierarchyEditorParent<ProductMgmtChild> & {
+    productId: string
+}
+
+function toEditorItems(items: ProductLineWithModels[]): ProductMgmtParent[] {
+    return items.map((line) => ({
+        id: line.id,
+        productId: line.productId,
+        name: line.name,
+        displayOrder: line.displayOrder,
+        children: line.models.map((model) => ({
+            id: model.id,
+            productLineId: model.productLineId,
+            name: model.name,
+            displayOrder: model.displayOrder
+        }))
+    }))
+}
+
+export default function ProductManagementPage() {
     const [products, setProducts] = useState<Product[]>([])
     const [selectedProductId, setSelectedProductId] = useState("")
-    const [productLines, setProductLines] = useState<ProductLineWithModels[]>([])
+    const [productLines, setProductLines] = useState<ProductMgmtParent[]>([])
     const [isLoadingProducts, setIsLoadingProducts] = useState(true)
     const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false)
     const [isEditorActive, setIsEditorActive] = useState(false)
@@ -53,7 +76,7 @@ export default function HierarchyEditorPage() {
 
             try {
                 const lines = await fetchProductHierarchy(selectedProductId)
-                setProductLines(lines)
+                setProductLines(toEditorItems(lines))
             } catch (error) {
                 console.error("Failed to load hierarchy:", error)
                 setErrorMessage("Could not load product lines and models.")
@@ -69,7 +92,7 @@ export default function HierarchyEditorPage() {
         return products.find((p) => p.id === selectedProductId)?.name ?? ""
     }, [products, selectedProductId])
 
-    const saveProductLineName = async (line: ProductLineWithModels, newName: string) => {
+    const saveProductLineName = async (line: ProductMgmtParent, newName: string) => {
         const trimmedName = newName.trim()
         if (!trimmedName) {
             throw new Error("Product line name cannot be empty.")
@@ -91,8 +114,8 @@ export default function HierarchyEditorPage() {
     }
 
     const saveModelName = async (
-        line: ProductLineWithModels,
-        model: ProductLineWithModels["models"][number],
+        line: ProductMgmtParent,
+        model: ProductMgmtChild,
         newName: string
     ) => {
         const trimmedName = newName.trim()
@@ -109,7 +132,7 @@ export default function HierarchyEditorPage() {
 
                 return {
                     ...item,
-                    models: item.models.map((m) =>
+                    children: item.children.map((m) =>
                         m.id === updated.id
                             ? {
                                 ...m,
@@ -124,7 +147,7 @@ export default function HierarchyEditorPage() {
         )
     }
 
-    const createModelForLine = async (line: ProductLineWithModels, newName: string) => {
+    const createModelForLine = async (line: ProductMgmtParent, newName: string) => {
         const trimmedName = newName.trim()
         if (!trimmedName) {
             throw new Error("Model name cannot be empty.")
@@ -136,7 +159,15 @@ export default function HierarchyEditorPage() {
                 item.id === line.id
                     ? {
                         ...item,
-                        models: [...item.models, created]
+                        children: [
+                            ...item.children,
+                            {
+                                id: created.id,
+                                productLineId: created.productLineId,
+                                name: created.name,
+                                displayOrder: created.displayOrder
+                            }
+                        ]
                     }
                     : item
             )
@@ -154,12 +185,67 @@ export default function HierarchyEditorPage() {
         }
 
         const created = await createProductLine(selectedProductId, trimmedName)
-        setProductLines((prev) => [...prev, { ...created, models: [] }])
+        setProductLines((prev) => [
+            ...prev,
+            {
+                id: created.id,
+                productId: created.productId,
+                name: created.name,
+                displayOrder: created.displayOrder,
+                children: []
+            }
+        ])
+    }
+
+    const reorderProductLines = async (reorderedItems: ProductMgmtParent[]) => {
+        const previous = productLines
+        setProductLines(reorderedItems)
+
+        try {
+            await Promise.all(
+                reorderedItems.map((line) =>
+                    updateProductLine(line.id, { displayOrder: line.displayOrder })
+                )
+            )
+        } catch (error) {
+            console.error("Failed to reorder product lines:", error)
+            setErrorMessage("Unable to save product line order.")
+            setProductLines(previous)
+        }
+    }
+
+    const reorderModelsForLine = async (
+        line: ProductMgmtParent,
+        reorderedModels: ProductMgmtChild[]
+    ) => {
+        const previous = productLines
+        setProductLines((prev) =>
+            prev.map((item) =>
+                item.id === line.id
+                    ? {
+                        ...item,
+                        children: reorderedModels
+                    }
+                    : item
+            )
+        )
+
+        try {
+            await Promise.all(
+                reorderedModels.map((model) =>
+                    updateModel(model.id, { displayOrder: model.displayOrder })
+                )
+            )
+        } catch (error) {
+            console.error("Failed to reorder models:", error)
+            setErrorMessage("Unable to save model order.")
+            setProductLines(previous)
+        }
     }
 
     return (
         <div className="mx-auto max-w-4xl space-y-4 p-6">
-            <h1 className="text-xl font-semibold">Hierarchy List Editor</h1>
+            <h1 className="text-xl font-semibold">Product Management</h1>
             <p className="text-sm text-muted-foreground">
                 Select a product, then edit product lines and nested models inline.
             </p>
@@ -197,11 +283,15 @@ export default function HierarchyEditorPage() {
             {!isLoadingHierarchy && (
                 <MultiLevelListEditor
                     items={productLines}
-                    onSaveProductLine={saveProductLineName}
-                    onCreateProductLine={createProductLineForProduct}
-                    onCreateModel={createModelForLine}
-                    onSaveModel={saveModelName}
+                    onSaveParent={saveProductLineName}
+                    onCreateParent={createProductLineForProduct}
+                    onCreateChild={createModelForLine}
+                    onSaveChild={saveModelName}
+                    onReorderParents={reorderProductLines}
+                    onReorderChildren={reorderModelsForLine}
                     onActiveStateChange={setIsEditorActive}
+                    addParentLabel="Add Product Line"
+                    addChildLabel="Add Model"
                     emptyMessage="No product lines found for this product."
                 />
             )}

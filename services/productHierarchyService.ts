@@ -3,24 +3,29 @@ import { ProductLineWithModels } from "@/types/productHierarchy"
 
 // GET FULL HIERARCHY FOR A PRODUCT
 export async function fetchProductHierarchy(
-    productId: string
+    productId?: string
 ): Promise<ProductLineWithModels[]> {
-    const { data, error } = await supabase
-        .from("product_line")
+    let query = supabase
+        .from("prod_line")
         .select(`
       id,
-      product_id,
-      name,
+      prod_id,
+      prod_line_name,
       display_order,
-      product_line_model (
+      model (
         id,
-        product_line_id,
-        name,
+        prod_line_id,
+        model_name,
         display_order
       )
     `)
-        .eq("product_id", productId)
         .order("display_order")
+
+    if (productId) {
+        query = query.eq("prod_id", productId)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         console.error("fetchProductHierarchy error:", error)
@@ -29,18 +34,18 @@ export async function fetchProductHierarchy(
 
     return (data ?? []).map((pl) => ({
         id: pl.id,
-        productId: pl.product_id,
-        name: pl.name,
+        productId: pl.prod_id,
+        name: pl.prod_line_name,
         displayOrder: pl.display_order,
-        models: (pl.product_line_model ?? []).map((m: {
+        models: (pl.model ?? []).map((m: {
             id: string
-            product_line_id: string
-            name: string
+            prod_line_id: string
+            model_name: string
             display_order: number
         }) => ({
             id: m.id,
-            productLineId: m.product_line_id,
-            name: m.name,
+            productLineId: m.prod_line_id,
+            name: m.model_name,
             displayOrder: m.display_order
         }))
     }))

@@ -1,5 +1,6 @@
-import { ProductLine, ProductLineModel } from "@/types"
+import { Model } from "./model"
+import { ProductLine } from "./productLine"
 
 export type ProductLineWithModels = ProductLine & {
-    models: ProductLineModel[]
+    models: Model[]
 }
