@@ -25,6 +25,10 @@ type ConfigMgmtParent = HierarchyEditorParent<ConfigMgmtChild> & {
     configTypeName: string
 }
 
+function isSingleSelectConfig(line: ConfigMgmtParent): boolean {
+    return line.configTypeName.trim().toLowerCase() === "single select"
+}
+
 function toEditorItems(
     configHierarchy: Awaited<ReturnType<typeof fetchConfigHierarchy>>,
     configTypeNameById: Map<string, string>
@@ -161,6 +165,10 @@ export default function ConfigurationManagementPage() {
     }
 
     const createOptionForConfig = async (line: ConfigMgmtParent, newName: string) => {
+        if (!isSingleSelectConfig(line)) {
+            throw new Error("Options are only available for Single Select configs.")
+        }
+
         const trimmedName = newName.trim()
         if (!trimmedName) {
             throw new Error("Option name cannot be empty.")
@@ -264,20 +272,20 @@ export default function ConfigurationManagementPage() {
     }
 
     return (
-        <div className="mx-auto max-w-5xl space-y-5 p-6">
-            <div>
+        <div className="mx-auto flex h-screen w-full max-w-5xl flex-col gap-5 overflow-hidden p-6">
+            <div className="shrink-0">
                 <h1 className="text-2xl font-semibold tracking-tight">Configuration Management</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                     Edit configs and nested config options inline.
                 </p>
             </div>
 
-            <Card>
+            <Card className="flex min-h-0 flex-1 flex-col">
                 <CardHeader>
                     <CardTitle>Configs and Options</CardTitle>
                     <CardDescription>Assign each config to a type and maintain its available options.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-h-0 flex-1 overflow-y-auto">
                     {isLoading ? (
                         <div className="space-y-3">
                             <Skeleton className="h-16 w-full" />
@@ -301,6 +309,7 @@ export default function ConfigurationManagementPage() {
                             onSaveChild={saveConfigOptionName}
                             onReorderParents={reorderConfigs}
                             onReorderChildren={reorderOptionsForConfig}
+                            canExpandParent={isSingleSelectConfig}
                             onActiveStateChange={setIsEditorActive}
                             addParentLabel="Add Config"
                             addChildLabel="Add Option"
@@ -311,11 +320,13 @@ export default function ConfigurationManagementPage() {
             </Card>
 
             {isEditorActive && (
-                <Badge variant="outline">Editing active. Finish or cancel to unlock other actions.</Badge>
+                <Badge variant="outline" className="shrink-0">
+                    Editing active. Finish or cancel to unlock other actions.
+                </Badge>
             )}
 
             {errorMessage && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="shrink-0">
                     <AlertTitle>Configuration issue</AlertTitle>
                     <AlertDescription>{errorMessage}</AlertDescription>
                 </Alert>

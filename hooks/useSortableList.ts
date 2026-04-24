@@ -7,6 +7,9 @@ const AUTO_SCROLL_MAX_SPEED = 18
 
 type ItemMetrics = {
     id: string
+    top: number
+    bottom: number
+    height: number
     midpoint: number
 }
 
@@ -20,6 +23,11 @@ type DragElementStyles = {
     position: string
     zIndex: string
     transition: string
+    willChange: string
+}
+
+type DisplacedElementStyles = {
+    transform: string
     willChange: string
 }
 
@@ -78,6 +86,10 @@ export function useSortableList<T extends { id: string }>(
     const draggingElementRef = useRef<HTMLElement | null>(null)
     const appliedTransformRef = useRef(0)
     const originalDragElementStylesRef = useRef<DragElementStyles | null>(null)
+    const originalDisplacedElementStylesRef = useRef(new Map<string, DisplacedElementStyles>())
+    const appliedDisplacementTransformsRef = useRef(new Map<string, number>())
+    const dragStartIndexRef = useRef<number | null>(null)
+    const dragSlotSizeRef = useRef(0)
     const enabledRef = useRef(enabled)
 
     const setContainerElement = useCallback((element: HTMLElement | null) => {
@@ -135,11 +147,35 @@ export function useSortableList<T extends { id: string }>(
 
                 return {
                     id: item.id,
+                    top: topWithinContainer,
+                    bottom: topWithinContainer + rect.height,
+                    height: rect.height,
                     midpoint: topWithinContainer + rect.height / 2
                 } satisfies ItemMetrics
             })
             .filter((metric): metric is ItemMetrics => metric !== null)
     }, [items])
+
+    const getDragSlotSize = useCallback((startIndex: number) => {
+        const metrics = itemMetricsRef.current
+        const currentMetric = metrics[startIndex]
+
+        if (!currentMetric) {
+            return 0
+        }
+
+        const nextMetric = metrics[startIndex + 1]
+        if (nextMetric) {
+            return Math.max(nextMetric.top - currentMetric.top, currentMetric.height)
+        }
+
+        const previousMetric = metrics[startIndex - 1]
+        if (previousMetric) {
+            return Math.max(currentMetric.top - previousMetric.top, currentMetric.height)
+        }
+
+        return currentMetric.height
+    }, [])
 
     const prepareDragElement = useCallback((id: string) => {
         const element = itemElementsRef.current.get(id) ?? null
@@ -201,6 +237,91 @@ export function useSortableList<T extends { id: string }>(
         appliedTransformRef.current = 0
     }, [])
 
+    const clearDisplacedTransforms = useCallback(() => {
+        originalDisplacedElementStylesRef.current.forEach((originalStyles, id) => {
+            const element = itemElementsRef.current.get(id)
+            if (!element) {
+                return
+            }
+
+            element.style.transform = originalStyles.transform
+            element.style.willChange = originalStyles.willChange
+        })
+
+        originalDisplacedElementStylesRef.current.clear()
+        appliedDisplacementTransformsRef.current.clear()
+    }, [])
+
+    const setDisplacedTransform = useCallback((id: string, deltaY: number) => {
+        const element = itemElementsRef.current.get(id)
+        if (!element) {
+            return
+        }
+
+        if (!originalDisplacedElementStylesRef.current.has(id)) {
+            originalDisplacedElementStylesRef.current.set(id, {
+                transform: element.style.transform,
+                willChange: element.style.willChange
+            })
+        }
+
+        if (appliedDisplacementTransformsRef.current.get(id) === deltaY) {
+            return
+        }
+
+        if (deltaY === 0) {
+            const originalStyles = originalDisplacedElementStylesRef.current.get(id)
+            element.style.transform = originalStyles?.transform ?? ""
+            element.style.willChange = originalStyles?.willChange ?? ""
+            originalDisplacedElementStylesRef.current.delete(id)
+            appliedDisplacementTransformsRef.current.delete(id)
+            return
+        }
+
+        element.style.transform = `translate3d(0, ${deltaY}px, 0)`
+        element.style.willChange = "transform"
+        appliedDisplacementTransformsRef.current.set(id, deltaY)
+    }, [])
+
+    const applyDisplacedTransforms = useCallback((insertionIndex: number | null) => {
+        const startIndex = dragStartIndexRef.current
+        const draggedId = draggingIdRef.current
+        const slotSize = dragSlotSizeRef.current
+
+        if (startIndex === null || insertionIndex === null || !draggedId || slotSize === 0) {
+            clearDisplacedTransforms()
+            return
+        }
+
+        const toIndex = insertionIndex > startIndex ? insertionIndex - 1 : insertionIndex
+        const nextTransforms = new Map<string, number>()
+
+        items.forEach((item, index) => {
+            if (item.id === draggedId || toIndex === startIndex) {
+                return
+            }
+
+            if (toIndex > startIndex && index > startIndex && index <= toIndex) {
+                nextTransforms.set(item.id, -slotSize)
+                return
+            }
+
+            if (toIndex < startIndex && index >= toIndex && index < startIndex) {
+                nextTransforms.set(item.id, slotSize)
+            }
+        })
+
+        appliedDisplacementTransformsRef.current.forEach((_, id) => {
+            if (!nextTransforms.has(id)) {
+                setDisplacedTransform(id, 0)
+            }
+        })
+
+        nextTransforms.forEach((deltaY, id) => {
+            setDisplacedTransform(id, deltaY)
+        })
+    }, [clearDisplacedTransforms, items, setDisplacedTransform])
+
     const getDropFromClientY = useCallback((clientY: number) => {
         if (items.length === 0) {
             return { nextDropIndex: null as number | null, nextDragOverId: null as string | null }
@@ -253,7 +374,9 @@ export function useSortableList<T extends { id: string }>(
             dragOverIdRef.current = nextDragOverId
             setDragOverId(nextDragOverId)
         }
-    }, [getDropFromClientY])
+
+        applyDisplacedTransforms(nextDropIndex)
+    }, [applyDisplacedTransforms, getDropFromClientY])
 
     const updateAutoScroll = useCallback((clientY: number) => {
         const container = containerRef.current
@@ -318,12 +441,15 @@ export function useSortableList<T extends { id: string }>(
         setDropIndex(null)
         setIsDragging(false)
         clearDragTransform()
+        clearDisplacedTransforms()
         draggingIdRef.current = null
         didMoveRef.current = false
         lastClientYRef.current = null
         dragOffsetRef.current = 0
         dropIndexRef.current = null
         dragOverIdRef.current = null
+        dragStartIndexRef.current = null
+        dragSlotSizeRef.current = 0
         itemMetricsRef.current = []
         stopMoveLoop()
         stopAutoScroll()
@@ -332,7 +458,7 @@ export function useSortableList<T extends { id: string }>(
             document.body.style.userSelect = originalUserSelectRef.current
             originalUserSelectRef.current = null
         }
-    }, [clearDragTransform, stopAutoScroll, stopMoveLoop])
+    }, [clearDisplacedTransforms, clearDragTransform, stopAutoScroll, stopMoveLoop])
 
     const processPendingPointer = useCallback(() => {
         moveRafRef.current = null
@@ -377,6 +503,7 @@ export function useSortableList<T extends { id: string }>(
         lastClientYRef.current = event.clientY
         pendingClientYRef.current = event.clientY
         draggingIdRef.current = id
+        dragStartIndexRef.current = startIndex
         didMoveRef.current = false
 
         setDraggingId(id)
@@ -390,8 +517,9 @@ export function useSortableList<T extends { id: string }>(
         draggingElementRef.current = itemElementsRef.current.get(id) ?? null
         appliedTransformRef.current = 0
         buildItemMetrics()
+        dragSlotSizeRef.current = getDragSlotSize(startIndex)
         prepareDragElement(id)
-    }, [buildItemMetrics, items, onReorder, prepareDragElement])
+    }, [buildItemMetrics, getDragSlotSize, items, onReorder, prepareDragElement])
 
     const handleMouseEnter = useCallback((id: string) => {
         if (!draggingIdRef.current) {
@@ -412,7 +540,9 @@ export function useSortableList<T extends { id: string }>(
             dropIndexRef.current = index
             setDropIndex(index)
         }
-    }, [items])
+
+        applyDisplacedTransforms(index)
+    }, [applyDisplacedTransforms, items])
 
     const handleMouseMove = useCallback((event: MouseEvent) => {
         if (!enabledRef.current || !draggingIdRef.current) {
@@ -479,13 +609,14 @@ export function useSortableList<T extends { id: string }>(
     useEffect(() => {
         return () => {
             clearDragTransform()
+            clearDisplacedTransforms()
             stopMoveLoop()
             stopAutoScroll()
             if (originalUserSelectRef.current !== null) {
                 document.body.style.userSelect = originalUserSelectRef.current
             }
         }
-    }, [clearDragTransform, stopAutoScroll, stopMoveLoop])
+    }, [clearDisplacedTransforms, clearDragTransform, stopAutoScroll, stopMoveLoop])
 
     return {
         draggingId,

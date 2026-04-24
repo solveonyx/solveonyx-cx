@@ -36,7 +36,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-background text-foreground antialiased">
         <TooltipProvider>
           <AppSidebar />
-          <main className="min-h-screen pl-64">{children}</main>
+          <main className="min-h-screen pl-[4.5rem]">{children}</main>
         </TooltipProvider>
       </body>
     </html>

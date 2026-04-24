@@ -173,21 +173,12 @@ export function ListEditor<T extends { id: string }>({
             className="space-y-2"
             ref={canReorder ? sortable.setContainerElement : undefined}
         >
-            {sortedItems.map((row, rowIndex) => {
+            {sortedItems.map((row) => {
                 const isEditing = editingId === row.id
                 const isDraggingRow = canReorder && sortable.draggingId === row.id
-                const showGapBefore =
-                    canReorder &&
-                    sortable.isDragging &&
-                    sortable.dropIndex === rowIndex &&
-                    sortable.draggingId !== row.id
 
                 return (
                     <div key={row.id} className="space-y-2">
-                        {showGapBefore && (
-                            <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
-                        )}
-
                         <div
                             ref={canReorder ? (node) => sortable.setItemElement(row.id, node) : undefined}
                             className={cn(
@@ -264,12 +255,6 @@ export function ListEditor<T extends { id: string }>({
                     </div>
                 )
             })}
-
-            {canReorder &&
-                sortable.isDragging &&
-                sortable.dropIndex === sortedItems.length && (
-                    <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
-                )}
 
             {canAdd && isAdding && (
                 <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm">

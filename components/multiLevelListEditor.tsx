@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, GripVertical, Pencil, Plus, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,7 @@ type MultiLevelListEditorProps<
     emptyMessage?: string
     onReorderParents?: (items: TParent[]) => void
     onReorderChildren?: (parent: TParent, items: TChild[]) => void
+    canExpandParent?: (parent: TParent) => boolean
 }
 
 function sortableDisplayOrder(value: number | null | undefined): number {
@@ -46,7 +47,8 @@ export function MultiLevelListEditor<
     onActiveStateChange,
     emptyMessage = "No parent rows to display.",
     onReorderParents,
-    onReorderChildren
+    onReorderChildren,
+    canExpandParent
 }: MultiLevelListEditorProps<TChild, TParent>) {
     const PARENT_LOCK_KEY = "parent"
     const [expandedParentIds, setExpandedParentIds] = useState<Set<string>>(new Set())
@@ -88,22 +90,48 @@ export function MultiLevelListEditor<
         })) as TParent[]
     }, [items])
 
+    const isParentExpandable = useCallback((parent: TParent) => {
+        return canExpandParent?.(parent) ?? true
+    }, [canExpandParent])
+
     useEffect(() => {
         if (!visibleChildParentId) {
             return
         }
 
-        setExpandedParentIds(new Set([visibleChildParentId]))
-    }, [visibleChildParentId])
+        const visibleParent = sortedParents.find((parent) => parent.id === visibleChildParentId)
+        if (!visibleParent || !isParentExpandable(visibleParent)) {
+            return
+        }
 
-    const toggleExpanded = (parentId: string) => {
+        setExpandedParentIds(new Set([visibleChildParentId]))
+    }, [isParentExpandable, sortedParents, visibleChildParentId])
+
+    useEffect(() => {
+        setExpandedParentIds((current) => {
+            const expandableIds = new Set(
+                sortedParents
+                    .filter((parent) => isParentExpandable(parent))
+                    .map((parent) => parent.id)
+            )
+            const next = new Set([...current].filter((id) => expandableIds.has(id)))
+
+            return next.size === current.size ? current : next
+        })
+    }, [isParentExpandable, sortedParents])
+
+    const toggleExpanded = (parent: TParent) => {
+        if (!isParentExpandable(parent)) {
+            return
+        }
+
         setExpandedParentIds((current) => {
             const next = new Set(current)
 
-            if (next.has(parentId)) {
-                next.delete(parentId)
+            if (next.has(parent.id)) {
+                next.delete(parent.id)
             } else {
-                next.add(parentId)
+                next.add(parent.id)
             }
 
             return next
@@ -211,7 +239,7 @@ export function MultiLevelListEditor<
     const canStartParentAction = !parentIsLocked && !hasLocalParentActiveEditor
     const canSaveNewParent = newParentName.trim().length > 0
     const canSaveEditedParent = parentDraftName.trim().length > 0
-    const hasExpandedParent = expandedParentIds.size > 0 || Boolean(visibleChildParentId)
+    const hasExpandedParent = expandedParentIds.size > 0
     const allParentsCollapsed = !hasExpandedParent
     const canReorderParents =
         Boolean(onReorderParents) &&
@@ -267,24 +295,16 @@ export function MultiLevelListEditor<
                 className="space-y-3"
                 ref={canReorderParents ? parentSortable.setContainerElement : undefined}
             >
-                {sortedParents.map((parent, rowIndex) => {
-                    const isExpanded = expandedParentIds.has(parent.id)
+                {sortedParents.map((parent) => {
+                    const canExpand = isParentExpandable(parent)
+                    const isExpanded = canExpand && expandedParentIds.has(parent.id)
                     const isEditing = editingParentId === parent.id
-                    const showChildren = !visibleChildParentId || visibleChildParentId === parent.id
+                    const showChildren = canExpand && (!visibleChildParentId || visibleChildParentId === parent.id)
                     const parentReorderIsAvailable = canReorderParents
                     const isDraggingRow = parentReorderIsAvailable && parentSortable.draggingId === parent.id
-                    const showGapBefore =
-                        parentReorderIsAvailable &&
-                        parentSortable.isDragging &&
-                        parentSortable.dropIndex === rowIndex &&
-                        parentSortable.draggingId !== parent.id
 
                     return (
                         <div key={parent.id} className="space-y-2">
-                            {showGapBefore && (
-                                <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
-                            )}
-
                             <div
                                 ref={
                                     parentReorderIsAvailable
@@ -322,16 +342,20 @@ export function MultiLevelListEditor<
                                         </Button>
                                     )}
 
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => toggleExpanded(parent.id)}
-                                        className="w-8 px-0"
-                                        aria-label={isExpanded ? "Collapse row" : "Expand row"}
-                                    >
-                                        {isExpanded ? <ChevronDown /> : <ChevronRight />}
-                                    </Button>
+                                    {canExpand ? (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => toggleExpanded(parent)}
+                                            className="w-8 px-0"
+                                            aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                                        >
+                                            {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                                        </Button>
+                                    ) : (
+                                        <span className="w-8 shrink-0" aria-hidden="true" />
+                                    )}
 
                                     <div className="min-w-0 flex-1">
                                         {isEditing ? (
@@ -418,12 +442,6 @@ export function MultiLevelListEditor<
                         </div>
                     )
                 })}
-
-                {canReorderParents &&
-                    parentSortable.isDragging &&
-                    parentSortable.dropIndex === sortedParents.length && (
-                        <div className="h-2 rounded-lg border-2 border-dashed border-accent/70 bg-accent/20" />
-                    )}
             </div>
 
             {canAddParent && isAddingParent && (
