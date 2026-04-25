@@ -10,6 +10,7 @@ import { appNavItems } from "@/lib/app-nav"
 import { cn } from "@/lib/utils"
 
 export function AppSidebar() {
+    const sidebarTransitionClass = "duration-200 ease-out"
     const pathname = usePathname()
     const { isNavigationLocked } = useAppShellLock()
     const [isExpanded, setIsExpanded] = useState(false)
@@ -107,13 +108,13 @@ export function AppSidebar() {
         <>
             <div
                 className={cn(
-                    "pointer-events-none fixed inset-0 z-20 bg-black/0 transition-colors duration-200",
-                    sidebarIsExpanded && "bg-black/20"
+                    `pointer-events-none fixed inset-0 z-20 bg-black/20 opacity-0 transition-opacity ${sidebarTransitionClass}`,
+                    sidebarIsExpanded && "opacity-100"
                 )}
             />
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-30 overflow-hidden border-r bg-card p-3 shadow-sm transition-[width] duration-200 ease-out",
+                    `fixed inset-y-0 left-0 z-30 overflow-hidden border-r bg-card p-3 shadow-sm transition-[width] ${sidebarTransitionClass}`,
                     sidebarIsExpanded ? "w-64" : "w-[4.5rem]",
                     isNavigationLocked && "select-none"
                 )}
