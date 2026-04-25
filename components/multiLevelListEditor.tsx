@@ -22,6 +22,7 @@ type MultiLevelListEditorProps<
     addChildLabel?: string
     visibleChildParentId?: string | null
     onActiveStateChange?: (isActive: boolean) => void
+    interactionLocked?: boolean
     emptyMessage?: string
     onReorderParents?: (items: TParent[]) => void
     onReorderChildren?: (parent: TParent, items: TChild[]) => void
@@ -45,6 +46,7 @@ export function MultiLevelListEditor<
     addChildLabel = "Add Child",
     visibleChildParentId,
     onActiveStateChange,
+    interactionLocked = false,
     emptyMessage = "No parent rows to display.",
     onReorderParents,
     onReorderChildren,
@@ -121,6 +123,10 @@ export function MultiLevelListEditor<
     }, [isParentExpandable, sortedParents])
 
     const toggleExpanded = (parent: TParent) => {
+        if (interactionLocked) {
+            return
+        }
+
         if (!isParentExpandable(parent)) {
             return
         }
@@ -235,7 +241,7 @@ export function MultiLevelListEditor<
     const canEditParent = Boolean(onSaveParent)
     const canAddParent = Boolean(onCreateParent)
     const hasLocalParentActiveEditor = editingParentId !== null || isAddingParent
-    const parentIsLocked = Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
+    const parentIsLocked = interactionLocked || Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
     const canStartParentAction = !parentIsLocked && !hasLocalParentActiveEditor
     const canSaveNewParent = newParentName.trim().length > 0
     const canSaveEditedParent = parentDraftName.trim().length > 0
@@ -245,6 +251,7 @@ export function MultiLevelListEditor<
         Boolean(onReorderParents) &&
         sortedParents.length > 1 &&
         allParentsCollapsed &&
+        !interactionLocked &&
         activeEditorKey === null &&
         !isSavingParent &&
         !isCreatingParent
@@ -348,6 +355,7 @@ export function MultiLevelListEditor<
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => toggleExpanded(parent)}
+                                            disabled={interactionLocked}
                                             className="w-8 px-0"
                                             aria-label={isExpanded ? "Collapse row" : "Expand row"}
                                         >
@@ -366,7 +374,14 @@ export function MultiLevelListEditor<
                                                 className="w-full"
                                             />
                                         ) : (
-                                            <div className="truncate text-sm font-medium">{parent.name}</div>
+                                            <div
+                                                className={cn(
+                                                    "truncate text-sm font-medium",
+                                                    interactionLocked && "text-muted-foreground"
+                                                )}
+                                            >
+                                                {parent.name}
+                                            </div>
                                         )}
                                     </div>
 
@@ -410,6 +425,7 @@ export function MultiLevelListEditor<
                                             sortField="displayOrder"
                                             editableField="name"
                                             interactionLocked={
+                                                interactionLocked ||
                                                 Boolean(activeEditorKey && activeEditorKey !== `child:${parent.id}`)
                                             }
                                             onActiveStateChange={(isActive) =>

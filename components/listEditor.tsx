@@ -220,7 +220,12 @@ export function ListEditor<T extends { id: string }>({
                                             className="w-full"
                                         />
                                     ) : (
-                                        <div className="truncate text-sm font-medium">
+                                        <div
+                                            className={cn(
+                                                "truncate text-sm font-medium",
+                                                interactionLocked && "text-muted-foreground"
+                                            )}
+                                        >
                                             {String((row[editableField] as EditableValue) ?? "")}
                                         </div>
                                     )}

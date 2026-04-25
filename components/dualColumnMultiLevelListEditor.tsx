@@ -46,6 +46,7 @@ type DualColumnMultiLevelListEditorProps<
     addChildLabel?: string
     visibleChildParentId?: string | null
     onActiveStateChange?: (isActive: boolean) => void
+    interactionLocked?: boolean
     emptyMessage?: string
     onReorderParents?: (items: TParent[]) => void
     onReorderChildren?: (parent: TParent, items: TChild[]) => void
@@ -70,6 +71,7 @@ export function DualColumnMultiLevelListEditor<
     addChildLabel = "Add Child",
     visibleChildParentId,
     onActiveStateChange,
+    interactionLocked = false,
     emptyMessage = "No parent rows to display.",
     onReorderParents,
     onReorderChildren,
@@ -147,6 +149,10 @@ export function DualColumnMultiLevelListEditor<
     }, [isParentExpandable, sortedParents])
 
     const toggleExpanded = (parent: TParent) => {
+        if (interactionLocked) {
+            return
+        }
+
         if (!isParentExpandable(parent)) {
             return
         }
@@ -271,7 +277,7 @@ export function DualColumnMultiLevelListEditor<
     const canEditParent = Boolean(onSaveParent || secondaryColumn.onSave)
     const canAddParent = Boolean(onCreateParent)
     const hasLocalParentActiveEditor = editingParentId !== null || isAddingParent
-    const parentIsLocked = Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
+    const parentIsLocked = interactionLocked || Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
     const canStartParentAction = !parentIsLocked && !hasLocalParentActiveEditor
     const canSaveNewParent = newParentName.trim().length > 0
     const canSaveEditedParent = parentDraftName.trim().length > 0
@@ -281,6 +287,7 @@ export function DualColumnMultiLevelListEditor<
         Boolean(onReorderParents) &&
         sortedParents.length > 1 &&
         allParentsCollapsed &&
+        !interactionLocked &&
         activeEditorKey === null &&
         !isSavingParent &&
         !isCreatingParent
@@ -386,6 +393,7 @@ export function DualColumnMultiLevelListEditor<
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => toggleExpanded(parent)}
+                                            disabled={interactionLocked}
                                             className="mt-0.5 w-8 px-0"
                                             aria-label={isExpanded ? "Collapse row" : "Expand row"}
                                         >
@@ -447,7 +455,14 @@ export function DualColumnMultiLevelListEditor<
                                             </div>
                                         ) : (
                                             <div className="space-y-1">
-                                                <div className="truncate font-medium">{parent.name}</div>
+                                                <div
+                                                    className={cn(
+                                                        "truncate font-medium",
+                                                        interactionLocked && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    {parent.name}
+                                                </div>
                                                 <div className="truncate text-sm text-muted-foreground">
                                                     {secondaryDisplayValue || "N/A"}
                                                 </div>
@@ -495,6 +510,7 @@ export function DualColumnMultiLevelListEditor<
                                             sortField="displayOrder"
                                             editableField="name"
                                             interactionLocked={
+                                                interactionLocked ||
                                                 Boolean(activeEditorKey && activeEditorKey !== `child:${parent.id}`)
                                             }
                                             onActiveStateChange={(isActive) =>

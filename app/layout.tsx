@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppSidebar } from "@/components/app-sidebar";
+import { AppShellLockProvider } from "@/components/app-shell-lock-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -35,8 +36,10 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
         <TooltipProvider>
-          <AppSidebar />
-          <main className="min-h-screen pl-[4.5rem]">{children}</main>
+          <AppShellLockProvider>
+            <AppSidebar />
+            <main className="min-h-screen pl-[4.5rem]">{children}</main>
+          </AppShellLockProvider>
         </TooltipProvider>
       </body>
     </html>

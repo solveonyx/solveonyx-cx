@@ -4,15 +4,18 @@ import { FocusEvent, MouseEvent, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { useAppShellLock } from "@/components/app-shell-lock-provider"
 import { Separator } from "@/components/ui/separator"
 import { appNavItems } from "@/lib/app-nav"
 import { cn } from "@/lib/utils"
 
 export function AppSidebar() {
     const pathname = usePathname()
+    const { isNavigationLocked } = useAppShellLock()
     const [isExpanded, setIsExpanded] = useState(false)
     const isExpandedRef = useRef(false)
     const expandTimeoutRef = useRef<number | null>(null)
+    const sidebarIsExpanded = isExpanded && !isNavigationLocked
 
     const setExpanded = (nextIsExpanded: boolean) => {
         isExpandedRef.current = nextIsExpanded
@@ -29,6 +32,10 @@ export function AppSidebar() {
     }
 
     const handleMouseEnter = () => {
+        if (isNavigationLocked) {
+            return
+        }
+
         clearExpandTimeout()
         expandTimeoutRef.current = window.setTimeout(() => {
             setExpanded(true)
@@ -42,6 +49,10 @@ export function AppSidebar() {
     }
 
     const handleFocus = () => {
+        if (isNavigationLocked) {
+            return
+        }
+
         clearExpandTimeout()
         setExpanded(true)
     }
@@ -55,7 +66,12 @@ export function AppSidebar() {
     }
 
     const handleNavMouseDown = (event: MouseEvent<HTMLAnchorElement>) => {
-        if (isExpandedRef.current) {
+        if (isNavigationLocked) {
+            event.preventDefault()
+            return
+        }
+
+        if (sidebarIsExpanded) {
             return
         }
 
@@ -63,7 +79,12 @@ export function AppSidebar() {
     }
 
     const handleNavClick = (event: MouseEvent<HTMLAnchorElement>) => {
-        if (isExpandedRef.current) {
+        if (isNavigationLocked) {
+            event.preventDefault()
+            return
+        }
+
+        if (sidebarIsExpanded) {
             return
         }
 
@@ -74,18 +95,27 @@ export function AppSidebar() {
         return clearExpandTimeout
     }, [])
 
+    useEffect(() => {
+        if (!isNavigationLocked) {
+            return
+        }
+
+        clearExpandTimeout()
+    }, [isNavigationLocked])
+
     return (
         <>
             <div
                 className={cn(
                     "pointer-events-none fixed inset-0 z-20 bg-black/0 transition-colors duration-200",
-                    isExpanded && "bg-black/20"
+                    sidebarIsExpanded && "bg-black/20"
                 )}
             />
             <aside
                 className={cn(
                     "fixed inset-y-0 left-0 z-30 overflow-hidden border-r bg-card p-3 shadow-sm transition-[width] duration-200 ease-out",
-                    isExpanded ? "w-64" : "w-[4.5rem]"
+                    sidebarIsExpanded ? "w-64" : "w-[4.5rem]",
+                    isNavigationLocked && "select-none"
                 )}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
@@ -107,7 +137,7 @@ export function AppSidebar() {
                         <div
                             className={cn(
                                 "ml-3 min-w-0 opacity-0 transition-opacity duration-150",
-                                isExpanded && "opacity-100"
+                                sidebarIsExpanded && "opacity-100"
                             )}
                         >
                             <div className="truncate text-base font-semibold tracking-tight">SolveOnyx CX</div>
@@ -132,7 +162,8 @@ export function AppSidebar() {
                                     "flex h-10 items-center rounded-lg px-2 text-sm transition-colors",
                                     isActive
                                         ? "bg-primary text-primary-foreground shadow-sm"
-                                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                                    isNavigationLocked && "pointer-events-none opacity-50"
                                 )}
                                 title={item.label}
                                 onMouseDown={handleNavMouseDown}
@@ -144,7 +175,7 @@ export function AppSidebar() {
                                 <span
                                     className={cn(
                                         "ml-2 min-w-0 truncate opacity-0 transition-opacity duration-150",
-                                        isExpanded && "opacity-100"
+                                        sidebarIsExpanded && "opacity-100"
                                     )}
                                 >
                                     {item.label}

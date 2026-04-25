@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { fetchConfigs } from "@/services/configurableService"
+import { fetchConfigs, updateConfig } from "@/services/configurableService"
 import { Config } from "@/types"
 
 export default function GalleryTestPage() {
@@ -36,6 +36,44 @@ export default function GalleryTestPage() {
         return configs.find((config) => config.id === selectedConfigId) ?? null
     }, [configs, selectedConfigId])
 
+    const saveConfigName = async (config: Config, newName: string) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Config name cannot be empty.")
+        }
+
+        const updated = await updateConfig(config.id, { name: trimmedName })
+        setConfigs((prev) =>
+            prev.map((item) =>
+                item.id === updated.id
+                    ? {
+                        ...item,
+                        name: updated.name,
+                        configTypeId: updated.configTypeId,
+                        displayOrder: updated.displayOrder
+                    }
+                    : item
+            )
+        )
+    }
+
+    const reorderConfigs = async (reorderedItems: Config[]) => {
+        const previous = configs
+        setConfigs(reorderedItems)
+
+        try {
+            await Promise.all(
+                reorderedItems.map((config) =>
+                    updateConfig(config.id, { displayOrder: config.displayOrder })
+                )
+            )
+        } catch (error) {
+            console.error("Failed to reorder configs:", error)
+            setErrorMessage("Unable to save config order.")
+            setConfigs(previous)
+        }
+    }
+
     return (
         <div className="mx-auto max-w-5xl space-y-5 p-6">
             <div>
@@ -45,12 +83,12 @@ export default function GalleryTestPage() {
                 </p>
             </div>
 
-            <Card>
+            <Card className="overflow-visible">
                 <CardHeader>
                     <CardTitle>Configs</CardTitle>
                     <CardDescription>Gallery rows are labeled from the config_name field.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="overflow-visible">
                     {isLoading ? (
                         <div className="w-full max-w-60 space-y-2">
                             <Skeleton className="h-11 w-full" />
@@ -64,6 +102,8 @@ export default function GalleryTestPage() {
                                 selectedId={selectedConfigId}
                                 getItemLabel={(config) => config.name}
                                 onSelect={(config) => setSelectedConfigId(config.id)}
+                                onSave={saveConfigName}
+                                reorder={{ onReorder: reorderConfigs }}
                                 emptyMessage="No configs found."
                             />
 

@@ -81,6 +81,7 @@ export function useSortableList<T extends { id: string }>(
     const pendingClientYRef = useRef<number | null>(null)
     const originalUserSelectRef = useRef<string | null>(null)
     const dragOffsetRef = useRef(0)
+    const dragStartScrollTopRef = useRef(0)
     const dropIndexRef = useRef<number | null>(null)
     const dragOverIdRef = useRef<string | null>(null)
     const draggingElementRef = useRef<HTMLElement | null>(null)
@@ -159,19 +160,19 @@ export function useSortableList<T extends { id: string }>(
     const getDragSlotSize = useCallback((startIndex: number) => {
         const metrics = itemMetricsRef.current
         const currentMetric = metrics[startIndex]
+        const container = containerRef.current
 
         if (!currentMetric) {
             return 0
         }
 
-        const nextMetric = metrics[startIndex + 1]
-        if (nextMetric) {
-            return Math.max(nextMetric.top - currentMetric.top, currentMetric.height)
-        }
+        if (container) {
+            const computedStyle = window.getComputedStyle(container)
+            const rawGap = computedStyle.rowGap || computedStyle.gap
+            const parsedGap = Number.parseFloat(rawGap)
+            const gap = Number.isFinite(parsedGap) ? parsedGap : 0
 
-        const previousMetric = metrics[startIndex - 1]
-        if (previousMetric) {
-            return Math.max(currentMetric.top - previousMetric.top, currentMetric.height)
+            return currentMetric.height + gap
         }
 
         return currentMetric.height
@@ -446,6 +447,7 @@ export function useSortableList<T extends { id: string }>(
         didMoveRef.current = false
         lastClientYRef.current = null
         dragOffsetRef.current = 0
+        dragStartScrollTopRef.current = 0
         dropIndexRef.current = null
         dragOverIdRef.current = null
         dragStartIndexRef.current = null
@@ -468,7 +470,23 @@ export function useSortableList<T extends { id: string }>(
         }
 
         const clientY = pendingClientYRef.current
-        const deltaY = clientY - dragStartClientYRef.current
+        const container = containerRef.current
+        const scrollDeltaY = container ? container.scrollTop - dragStartScrollTopRef.current : 0
+        const rawDeltaY = clientY - dragStartClientYRef.current + scrollDeltaY
+        const startIndex = dragStartIndexRef.current
+        const metrics = itemMetricsRef.current
+        const currentMetric = startIndex !== null ? metrics[startIndex] : null
+        const firstMetric = metrics[0]
+        const lastMetric = metrics[metrics.length - 1]
+
+        let deltaY = rawDeltaY
+
+        if (currentMetric && firstMetric && lastMetric) {
+            const minDeltaY = firstMetric.top - currentMetric.top
+            const maxDeltaY = lastMetric.bottom - currentMetric.bottom
+            deltaY = Math.min(Math.max(rawDeltaY, minDeltaY), maxDeltaY)
+        }
+
         if (Math.abs(deltaY) > 2) {
             didMoveRef.current = true
         }
@@ -517,6 +535,7 @@ export function useSortableList<T extends { id: string }>(
         draggingElementRef.current = itemElementsRef.current.get(id) ?? null
         appliedTransformRef.current = 0
         buildItemMetrics()
+        dragStartScrollTopRef.current = containerRef.current?.scrollTop ?? 0
         dragSlotSizeRef.current = getDragSlotSize(startIndex)
         prepareDragElement(id)
     }, [buildItemMetrics, getDragSlotSize, items, onReorder, prepareDragElement])
@@ -552,6 +571,18 @@ export function useSortableList<T extends { id: string }>(
         const clientY = event.clientY
         lastClientYRef.current = clientY
         pendingClientYRef.current = clientY
+
+        if (moveRafRef.current === null) {
+            moveRafRef.current = window.requestAnimationFrame(processPendingPointer)
+        }
+    }, [processPendingPointer])
+
+    const handleContainerScroll = useCallback(() => {
+        if (!enabledRef.current || !draggingIdRef.current || lastClientYRef.current === null) {
+            return
+        }
+
+        pendingClientYRef.current = lastClientYRef.current
 
         if (moveRafRef.current === null) {
             moveRafRef.current = window.requestAnimationFrame(processPendingPointer)
@@ -599,12 +630,14 @@ export function useSortableList<T extends { id: string }>(
 
         window.addEventListener("mousemove", handleMouseMove)
         window.addEventListener("mouseup", handleMouseUp)
+        containerRef.current?.addEventListener("scroll", handleContainerScroll, { passive: true })
 
         return () => {
             window.removeEventListener("mousemove", handleMouseMove)
             window.removeEventListener("mouseup", handleMouseUp)
+            containerRef.current?.removeEventListener("scroll", handleContainerScroll)
         }
-    }, [handleMouseMove, handleMouseUp, isDragging])
+    }, [handleContainerScroll, handleMouseMove, handleMouseUp, isDragging])
 
     useEffect(() => {
         return () => {

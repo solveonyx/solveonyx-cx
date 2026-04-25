@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useAppShellLock } from "@/components/app-shell-lock-provider"
 import { DualColumnMultiLevelListEditor } from "@/components/dualColumnMultiLevelListEditor"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -49,12 +50,14 @@ function toEditorItems(
 }
 
 export default function ConfigurationManagementPage() {
+    const CONFIG_EDITOR_KEY = "config-hierarchy"
     const [configLines, setConfigLines] = useState<ConfigMgmtParent[]>([])
     const [configTypes, setConfigTypes] = useState<ConfigType[]>([])
     const [defaultConfigTypeId, setDefaultConfigTypeId] = useState("")
     const [isLoading, setIsLoading] = useState(true)
-    const [isEditorActive, setIsEditorActive] = useState(false)
+    const [activeEditorKey, setActiveEditorKey] = useState<string | null>(null)
     const [errorMessage, setErrorMessage] = useState("")
+    const { setNavigationLocked } = useAppShellLock()
 
     useEffect(() => {
         const loadData = async () => {
@@ -271,6 +274,27 @@ export default function ConfigurationManagementPage() {
         }
     }
 
+    const handleConfigEditorActiveStateChange = useCallback((isActive: boolean) => {
+        setActiveEditorKey((current) => {
+            if (isActive) {
+                return current ?? CONFIG_EDITOR_KEY
+            }
+
+            return current === CONFIG_EDITOR_KEY ? null : current
+        })
+    }, [])
+
+    const configEditorInteractionLocked =
+        activeEditorKey !== null && activeEditorKey !== CONFIG_EDITOR_KEY
+
+    useEffect(() => {
+        setNavigationLocked(activeEditorKey !== null)
+
+        return () => {
+            setNavigationLocked(false)
+        }
+    }, [activeEditorKey, setNavigationLocked])
+
     return (
         <div className="mx-auto flex h-screen w-full max-w-5xl flex-col gap-5 overflow-hidden p-6">
             <div className="shrink-0">
@@ -310,7 +334,8 @@ export default function ConfigurationManagementPage() {
                             onReorderParents={reorderConfigs}
                             onReorderChildren={reorderOptionsForConfig}
                             canExpandParent={isSingleSelectConfig}
-                            onActiveStateChange={setIsEditorActive}
+                            onActiveStateChange={handleConfigEditorActiveStateChange}
+                            interactionLocked={configEditorInteractionLocked}
                             addParentLabel="Add Config"
                             addChildLabel="Add Option"
                             emptyMessage="No configs found."
@@ -319,7 +344,7 @@ export default function ConfigurationManagementPage() {
                 </CardContent>
             </Card>
 
-            {isEditorActive && (
+            {activeEditorKey !== null && (
                 <Badge variant="outline" className="shrink-0">
                     Editing active. Finish or cancel to unlock other actions.
                 </Badge>

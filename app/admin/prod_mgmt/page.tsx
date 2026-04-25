@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useAppShellLock } from "@/components/app-shell-lock-provider"
 import { MultiLevelListEditor } from "@/components/multiLevelListEditor"
 import { SelectionGallery } from "@/components/selectionGallery"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -9,9 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { fetchProductHierarchy } from "@/services/productHierarchyService"
 import {
+    createProduct,
     createModel,
     createProductLine,
     fetchProducts,
+    updateProduct,
     updateModel,
     updateProductLine
 } from "@/services/productService"
@@ -42,13 +45,16 @@ function toEditorItems(items: ProductLineWithModels[]): ProductMgmtParent[] {
 }
 
 export default function ProductManagementPage() {
+    const GALLERY_EDITOR_KEY = "products-gallery"
+    const HIERARCHY_EDITOR_KEY = "product-hierarchy"
     const [products, setProducts] = useState<Product[]>([])
     const [selectedProductId, setSelectedProductId] = useState("")
     const [productLines, setProductLines] = useState<ProductMgmtParent[]>([])
     const [isLoadingProducts, setIsLoadingProducts] = useState(true)
     const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false)
-    const [isEditorActive, setIsEditorActive] = useState(false)
+    const [activeEditorKey, setActiveEditorKey] = useState<string | null>(null)
     const [errorMessage, setErrorMessage] = useState("")
+    const { setNavigationLocked } = useAppShellLock()
 
     useEffect(() => {
         const loadProducts = async () => {
@@ -96,6 +102,69 @@ export default function ProductManagementPage() {
     const selectedProductName = useMemo(() => {
         return products.find((p) => p.id === selectedProductId)?.name ?? ""
     }, [products, selectedProductId])
+
+    const handleGalleryActiveStateChange = useCallback((isActive: boolean) => {
+        setActiveEditorKey((current) => {
+            if (isActive) {
+                return current ?? GALLERY_EDITOR_KEY
+            }
+
+            return current === GALLERY_EDITOR_KEY ? null : current
+        })
+    }, [])
+
+    const handleHierarchyActiveStateChange = useCallback((isActive: boolean) => {
+        setActiveEditorKey((current) => {
+            if (isActive) {
+                return current ?? HIERARCHY_EDITOR_KEY
+            }
+
+            return current === HIERARCHY_EDITOR_KEY ? null : current
+        })
+    }, [])
+
+    const galleryInteractionLocked = activeEditorKey !== null && activeEditorKey !== GALLERY_EDITOR_KEY
+    const hierarchyInteractionLocked =
+        activeEditorKey !== null && activeEditorKey !== HIERARCHY_EDITOR_KEY
+
+    useEffect(() => {
+        setNavigationLocked(activeEditorKey !== null)
+
+        return () => {
+            setNavigationLocked(false)
+        }
+    }, [activeEditorKey, setNavigationLocked])
+
+    const saveProductName = async (product: Product, newName: string) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Product name cannot be empty.")
+        }
+
+        const updated = await updateProduct(product.id, { name: trimmedName })
+        setProducts((prev) =>
+            prev.map((item) =>
+                item.id === updated.id
+                    ? {
+                        ...item,
+                        name: updated.name,
+                        displayOrder: updated.displayOrder
+                    }
+                    : item
+            )
+        )
+    }
+
+    const createNewProduct = async (newName: string) => {
+        const trimmedName = newName.trim()
+        if (!trimmedName) {
+            throw new Error("Product name cannot be empty.")
+        }
+
+        const created = await createProduct(trimmedName)
+        setProducts((prev) => [...prev, created])
+        setSelectedProductId(created.id)
+    }
 
     const saveProductLineName = async (line: ProductMgmtParent, newName: string) => {
         const trimmedName = newName.trim()
@@ -202,6 +271,23 @@ export default function ProductManagementPage() {
         ])
     }
 
+    const reorderProducts = async (reorderedItems: Product[]) => {
+        const previous = products
+        setProducts(reorderedItems)
+
+        try {
+            await Promise.all(
+                reorderedItems.map((product) =>
+                    updateProduct(product.id, { displayOrder: product.displayOrder })
+                )
+            )
+        } catch (error) {
+            console.error("Failed to reorder products:", error)
+            setErrorMessage("Unable to save product order.")
+            setProducts(previous)
+        }
+    }
+
     const reorderProductLines = async (reorderedItems: ProductMgmtParent[]) => {
         const previous = productLines
         setProductLines(reorderedItems)
@@ -258,12 +344,12 @@ export default function ProductManagementPage() {
             </div>
 
             <div className="grid min-h-0 flex-1 gap-5 md:grid-cols-[240px_minmax(0,1fr)]">
-                <Card className="min-h-0 md:flex md:h-full md:flex-col">
+                <Card className="min-h-0 overflow-visible md:flex md:h-full md:flex-col">
                     <CardHeader>
                         <CardTitle>Products</CardTitle>
                         <CardDescription>Select the product scope.</CardDescription>
                     </CardHeader>
-                    <CardContent className="min-h-0 flex-1">
+                    <CardContent className="min-h-0 flex-1 overflow-visible">
                         {isLoadingProducts ? (
                             <div className="h-full w-full max-w-60 space-y-2">
                                 <Skeleton className="h-11 w-full" />
@@ -276,7 +362,12 @@ export default function ProductManagementPage() {
                                 selectedId={selectedProductId}
                                 getItemLabel={(product) => product.name}
                                 onSelect={(product) => setSelectedProductId(product.id)}
-                                disabled={isEditorActive}
+                                onSave={saveProductName}
+                                onCreate={createNewProduct}
+                                onActiveStateChange={handleGalleryActiveStateChange}
+                                addButtonLabel="Add Product"
+                                reorder={{ onReorder: reorderProducts }}
+                                disabled={galleryInteractionLocked}
                                 className="h-full"
                                 emptyMessage="No products found."
                             />
@@ -314,7 +405,8 @@ export default function ProductManagementPage() {
                                 onSaveChild={saveModelName}
                                 onReorderParents={reorderProductLines}
                                 onReorderChildren={reorderModelsForLine}
-                                onActiveStateChange={setIsEditorActive}
+                                onActiveStateChange={handleHierarchyActiveStateChange}
+                                interactionLocked={hierarchyInteractionLocked}
                                 addParentLabel="Add Product Line"
                                 addChildLabel="Add Model"
                                 emptyMessage="No product lines found for this product."
