@@ -38,8 +38,8 @@ export function Popup({
                     <DialogDescription>{message}</DialogDescription>
                 </DialogHeader>
 
-                <DialogFooter>
-                    <Button type="button" onClick={onOk}>
+                <DialogFooter className="justify-center sm:justify-center">
+                    <Button type="button" onClick={onOk} className="min-w-[110px]">
                         {okLabel}
                     </Button>
                 </DialogFooter>

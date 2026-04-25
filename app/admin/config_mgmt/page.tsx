@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { popupDefinitions } from "@/lib/popupDefinitions"
 import { fetchConfigHierarchy } from "@/services/configurableHierarchyService"
 import {
     createConfig,
@@ -18,15 +19,18 @@ import {
     updateConfigOption
 } from "@/services/configurableService"
 import {
+    createMapModelConfig,
     createMapProdConfig,
     createMapProdLineConfig,
+    deleteMapModelConfig,
     deleteMapProdConfig,
     deleteMapProdLineConfig,
+    fetchMapModelConfigs,
     fetchMapProdConfigs,
     fetchMapProdLineConfigs
 } from "@/services/mapProdConfig"
-import { fetchProductLines, fetchProducts } from "@/services/productService"
-import { ConfigType, HierarchyEditorChild, HierarchyEditorParent, Product, ProductLine } from "@/types"
+import { fetchModels, fetchProductLines, fetchProducts } from "@/services/productService"
+import { ConfigType, HierarchyEditorChild, HierarchyEditorParent, Model, Product, ProductLine } from "@/types"
 
 type ConfigMgmtChild = HierarchyEditorChild & {
     configId: string
@@ -36,6 +40,15 @@ type ConfigMgmtParent = HierarchyEditorParent<ConfigMgmtChild> & {
     configTypeId: string
     configTypeName: string
 }
+
+const assignedProductLinesPopup = popupDefinitions.assignedProductLines
+const assignedModelsPopup = popupDefinitions.assignedModels
+const optionModelPlaceholderItems = [
+    { id: "placeholder-model-1", name: "Model A" },
+    { id: "placeholder-model-2", name: "Model B" },
+    { id: "placeholder-model-3", name: "Model C" },
+    { id: "placeholder-model-4", name: "Model D" }
+]
 
 function isSingleSelectConfig(line: ConfigMgmtParent): boolean {
     return line.configTypeName.trim().toLowerCase() === "single select"
@@ -72,6 +85,8 @@ type AssignedProductsEditorProps = {
         line: ProductLine,
         isSelected: boolean
     ) => Promise<void>
+    selectedModelIds: string[]
+    onToggleModel: (configId: string, model: Model, isSelected: boolean) => Promise<void>
     interactionLocked: boolean
     isPersisting: boolean
 }
@@ -83,12 +98,18 @@ function AssignedProductsEditor({
     onToggleProduct,
     selectedProductLineIds,
     onToggleProductLine,
+    selectedModelIds,
+    onToggleModel,
     interactionLocked
     ,
     isPersisting
 }: AssignedProductsEditorProps) {
     const [productLinesByProductId, setProductLinesByProductId] = useState<Record<string, ProductLine[]>>({})
+    const [modelsByProductLineId, setModelsByProductLineId] = useState<Record<string, Model[]>>({})
     const [loadingProductLineIds, setLoadingProductLineIds] = useState<string[]>([])
+    const [loadingModelProductLineIds, setLoadingModelProductLineIds] = useState<string[]>([])
+    const [popupMessage, setPopupMessage] = useState("")
+    const [isPopupOpen, setIsPopupOpen] = useState(false)
 
     const loadProductLines = useCallback(async (productId: string) => {
         setLoadingProductLineIds((current) =>
@@ -112,6 +133,28 @@ function AssignedProductsEditor({
         }
     }, [])
 
+    const loadModels = useCallback(async (productLineId: string) => {
+        setLoadingModelProductLineIds((current) =>
+            current.includes(productLineId) ? current : [...current, productLineId]
+        )
+
+        try {
+            const models = await fetchModels(productLineId)
+            setModelsByProductLineId((current) => ({
+                ...current,
+                [productLineId]: models
+            }))
+        } catch (error) {
+            console.error(`Failed to load models for product line ${productLineId}:`, error)
+            setModelsByProductLineId((current) => ({
+                ...current,
+                [productLineId]: []
+            }))
+        } finally {
+            setLoadingModelProductLineIds((current) => current.filter((id) => id !== productLineId))
+        }
+    }, [])
+
     useEffect(() => {
         selectedProductIds.forEach((productId) => {
             if (productLinesByProductId[productId] || loadingProductLineIds.includes(productId)) {
@@ -121,6 +164,19 @@ function AssignedProductsEditor({
             void loadProductLines(productId)
         })
     }, [loadProductLines, loadingProductLineIds, productLinesByProductId, selectedProductIds])
+
+    useEffect(() => {
+        selectedProductLineIds.forEach((productLineId) => {
+            if (
+                modelsByProductLineId[productLineId] ||
+                loadingModelProductLineIds.includes(productLineId)
+            ) {
+                return
+            }
+
+            void loadModels(productLineId)
+        })
+    }, [loadModels, loadingModelProductLineIds, modelsByProductLineId, selectedProductLineIds])
 
     const handleProductToggle = useCallback(
         async (product: Product, isSelected: boolean) => {
@@ -155,62 +211,187 @@ function AssignedProductsEditor({
                 return
             }
 
+            if (isSelected) {
+                try {
+                    const models = modelsByProductLineId[line.id] ?? await fetchModels(line.id)
+                    const modelIdSet = new Set(models.map((model) => model.id))
+                    const hasAssignedModels = selectedModelIds.some((modelId) => modelIdSet.has(modelId))
+
+                    if (hasAssignedModels) {
+                        setPopupMessage(
+                            assignedModelsPopup.messageText.replace(
+                                "{productLineName}",
+                                line.name
+                            )
+                        )
+                        setIsPopupOpen(true)
+                        return
+                    }
+                } catch (error) {
+                    console.error("Failed to validate product line removal:", error)
+                    return
+                }
+            }
+
             await onToggleProductLine(configId, productId, line, isSelected)
         },
-        [configId, interactionLocked, isPersisting, onToggleProductLine]
+        [
+            configId,
+            interactionLocked,
+            isPersisting,
+            modelsByProductLineId,
+            onToggleProductLine,
+            selectedModelIds
+        ]
+    )
+
+    const handleModelToggle = useCallback(
+        async (model: Model, isSelected: boolean) => {
+            if (interactionLocked || isPersisting) {
+                return
+            }
+
+            await onToggleModel(configId, model, isSelected)
+        },
+        [configId, interactionLocked, isPersisting, onToggleModel]
+    )
+
+    const selectedProductLines = selectedProductIds
+        .flatMap((productId) => productLinesByProductId[productId] ?? [])
+        .filter((line) => selectedProductLineIds.includes(line.id))
+        .sort((a, b) => {
+            if (a.displayOrder !== b.displayOrder) {
+                return a.displayOrder - b.displayOrder
+            }
+
+            return a.id.localeCompare(b.id)
+        })
+
+    const productLinesWithModels = selectedProductLines
+        .map((productLine) => ({
+            productLine,
+            models: [...(modelsByProductLineId[productLine.id] ?? [])].sort((a, b) => {
+                if (a.displayOrder !== b.displayOrder) {
+                    return a.displayOrder - b.displayOrder
+                }
+
+                return a.id.localeCompare(b.id)
+            })
+        }))
+        .filter(({ models }) => models.length > 0)
+
+    const isLoadingAnyModels = selectedProductLineIds.some((productLineId) =>
+        loadingModelProductLineIds.includes(productLineId)
     )
 
     return (
         <div className="space-y-3">
-            <PillList
-                items={products}
-                selectedIds={selectedProductIds}
-                getItemLabel={(product) => product.name}
-                onToggle={(product, isSelected) => {
-                    void handleProductToggle(product, isSelected)
-                }}
-                disabled={interactionLocked || isPersisting}
-                emptyMessage="No products found."
-            />
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Products
+                </p>
+                <PillList
+                    items={products}
+                    selectedIds={selectedProductIds}
+                    getItemLabel={(product) => product.name}
+                    onToggle={(product, isSelected) => {
+                        void handleProductToggle(product, isSelected)
+                    }}
+                    disabled={interactionLocked || isPersisting}
+                    emptyMessage="No products found."
+                />
+            </div>
 
-            {selectedProductIds.map((productId) => {
-                const product = products.find((item) => item.id === productId)
-                const productLines = productLinesByProductId[productId] ?? []
-                const isLoadingLines = loadingProductLineIds.includes(productId)
+            {selectedProductIds.length > 0 ? (
+                <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Product Lines
+                    </p>
+                    <div className="space-y-2">
+                        {selectedProductIds.map((productId, index) => {
+                            const product = products.find((item) => item.id === productId)
+                            const productLines = productLinesByProductId[productId] ?? []
+                            const isLoadingLines = loadingProductLineIds.includes(productId)
 
-                if (!product) {
-                    return null
-                }
+                            if (!product) {
+                                return null
+                            }
 
-                return (
-                    <div key={productId} className="rounded-lg border bg-muted/20 p-3">
-                        <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                            {product.name} Product Lines
-                        </p>
-
-                        {isLoadingLines ? (
-                            <div className="flex flex-wrap gap-2">
-                                <Skeleton className="h-6 w-24 rounded-full" />
-                                <Skeleton className="h-6 w-32 rounded-full" />
-                                <Skeleton className="h-6 w-20 rounded-full" />
-                            </div>
-                        ) : (
-                            <PillList
-                                items={productLines}
-                                selectedIds={productLines
-                                    .filter((line) => selectedProductLineIds.includes(line.id))
-                                    .map((line) => line.id)}
-                                getItemLabel={(line) => line.name}
-                                onToggle={(line, isSelected) => {
-                                    void handleProductLineToggle(productId, line, isSelected)
-                                }}
-                                disabled={interactionLocked || isPersisting}
-                                emptyMessage="No product lines found."
-                            />
-                        )}
+                            return (
+                                <div
+                                    key={productId}
+                                    className={index === 0 ? undefined : "pt-2"}
+                                >
+                                    {isLoadingLines ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            <Skeleton className="h-6 w-24 rounded-full" />
+                                            <Skeleton className="h-6 w-32 rounded-full" />
+                                            <Skeleton className="h-6 w-20 rounded-full" />
+                                        </div>
+                                    ) : (
+                                        <PillList
+                                            items={productLines}
+                                            selectedIds={productLines
+                                                .filter((line) => selectedProductLineIds.includes(line.id))
+                                                .map((line) => line.id)}
+                                            getItemLabel={(line) => line.name}
+                                            onToggle={(line, isSelected) => {
+                                                void handleProductLineToggle(productId, line, isSelected)
+                                            }}
+                                            disabled={interactionLocked || isPersisting}
+                                            emptyMessage="No product lines found."
+                                        />
+                                    )}
+                                </div>
+                            )
+                        })}
                     </div>
-                )
-            })}
+                </div>
+            ) : null}
+
+            {selectedProductLineIds.length > 0 ? (
+                <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Models
+                    </p>
+                    {isLoadingAnyModels ? (
+                        <div className="flex flex-wrap gap-2">
+                            <Skeleton className="h-6 w-20 rounded-full" />
+                            <Skeleton className="h-6 w-28 rounded-full" />
+                            <Skeleton className="h-6 w-24 rounded-full" />
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {productLinesWithModels.map(({ productLine, models }, index) => {
+                                return (
+                                    <div
+                                        key={productLine.id}
+                                        className={index === 0 ? undefined : "pt-2"}
+                                    >
+                                        <PillList
+                                            items={models}
+                                            selectedIds={selectedModelIds}
+                                            getItemLabel={(model) => model.name}
+                                            onToggle={(model, isSelected) => {
+                                                void handleModelToggle(model, isSelected)
+                                            }}
+                                            disabled={interactionLocked || isPersisting}
+                                        />
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            ) : null}
+
+            <Popup
+                open={isPopupOpen}
+                title="Assigned Models"
+                message={popupMessage}
+                okLabel={assignedModelsPopup.buttonLabels[0]}
+                onOk={() => setIsPopupOpen(false)}
+            />
         </div>
     )
 }
@@ -224,6 +405,9 @@ export default function ConfigurationManagementPage() {
         Record<string, string[]>
     >({})
     const [assignedProductLineIdsByConfigId, setAssignedProductLineIdsByConfigId] = useState<
+        Record<string, string[]>
+    >({})
+    const [assignedModelIdsByConfigId, setAssignedModelIdsByConfigId] = useState<
         Record<string, string[]>
     >({})
     const [persistingConfigIds, setPersistingConfigIds] = useState<string[]>([])
@@ -246,13 +430,15 @@ export default function ConfigurationManagementPage() {
                     configTypesResult,
                     hierarchyResult,
                     prodConfigMappings,
-                    prodLineConfigMappings
+                    prodLineConfigMappings,
+                    modelConfigMappings
                 ] = await Promise.all([
                     fetchProducts(),
                     fetchConfigTypes(),
                     fetchConfigHierarchy(),
                     fetchMapProdConfigs(),
-                    fetchMapProdLineConfigs()
+                    fetchMapProdLineConfigs(),
+                    fetchMapModelConfigs()
                 ])
 
                 const configTypeNameById = new Map(
@@ -274,11 +460,20 @@ export default function ConfigurationManagementPage() {
                     },
                     {}
                 )
+                const nextAssignedModelIdsByConfigId = modelConfigMappings.reduce<Record<string, string[]>>(
+                    (accumulator, mapping) => {
+                        const currentModelIds = accumulator[mapping.configId] ?? []
+                        accumulator[mapping.configId] = [...currentModelIds, mapping.modelId]
+                        return accumulator
+                    },
+                    {}
+                )
                 setProducts(products)
                 setConfigLines(toEditorItems(hierarchyResult, configTypeNameById))
                 setConfigTypes(configTypesResult)
                 setAssignedProductIdsByConfigId(nextAssignedProductIdsByConfigId)
                 setAssignedProductLineIdsByConfigId(nextAssignedProductLineIdsByConfigId)
+                setAssignedModelIdsByConfigId(nextAssignedModelIdsByConfigId)
                 setDefaultConfigTypeId(configTypesResult[0]?.id ?? "")
             } catch (error) {
                 console.error("Failed to load configuration hierarchy:", error)
@@ -446,7 +641,10 @@ export default function ConfigurationManagementPage() {
 
                     if (hasAssignedChildProductLines) {
                         setPopupMessage(
-                            `Remove assigned product lines for ${product.name} before removing the product from this configurable.`
+                            assignedProductLinesPopup.messageText.replace(
+                                "{productName}",
+                                product.name
+                            )
                         )
                         setIsPopupOpen(true)
                         return
@@ -510,6 +708,37 @@ export default function ConfigurationManagementPage() {
             } catch (error) {
                 console.error("Failed to persist product-line-config mapping:", error)
                 setErrorMessage("Unable to update assigned product lines.")
+            } finally {
+                setPersistingConfigIds((current) => current.filter((id) => id !== configId))
+            }
+        },
+        []
+    )
+
+    const handleAssignedModelToggle = useCallback(
+        async (configId: string, model: Model, isSelected: boolean) => {
+            setErrorMessage("")
+            setPersistingConfigIds((current) =>
+                current.includes(configId) ? current : [...current, configId]
+            )
+
+            try {
+                if (isSelected) {
+                    await deleteMapModelConfig(model.id, configId)
+                    setAssignedModelIdsByConfigId((current) => ({
+                        ...current,
+                        [configId]: (current[configId] ?? []).filter((id) => id !== model.id)
+                    }))
+                } else {
+                    await createMapModelConfig(model.id, configId)
+                    setAssignedModelIdsByConfigId((current) => ({
+                        ...current,
+                        [configId]: [...(current[configId] ?? []), model.id]
+                    }))
+                }
+            } catch (error) {
+                console.error("Failed to persist model-config mapping:", error)
+                setErrorMessage("Unable to update assigned models.")
             } finally {
                 setPersistingConfigIds((current) => current.filter((id) => id !== configId))
             }
@@ -626,6 +855,14 @@ export default function ConfigurationManagementPage() {
                             showParentSupplement
                             parentSupplementLabel="Assigned Products"
                             childSectionLabel="Options"
+                            childRowSupplementLabel="Attached Models"
+                            renderChildRowSupplement={() => (
+                                <PillList
+                                    items={optionModelPlaceholderItems}
+                                    getItemLabel={(item) => item.name}
+                                    emptyMessage="No models available."
+                                />
+                            )}
                             renderParentSupplement={(parent) => (
                                 <AssignedProductsEditor
                                     configId={parent.id}
@@ -634,6 +871,8 @@ export default function ConfigurationManagementPage() {
                                     onToggleProduct={handleAssignedProductToggle}
                                     selectedProductLineIds={assignedProductLineIdsByConfigId[parent.id] ?? []}
                                     onToggleProductLine={handleAssignedProductLineToggle}
+                                    selectedModelIds={assignedModelIdsByConfigId[parent.id] ?? []}
+                                    onToggleModel={handleAssignedModelToggle}
                                     interactionLocked={configEditorInteractionLocked}
                                     isPersisting={persistingConfigIds.includes(parent.id)}
                                 />
@@ -665,6 +904,7 @@ export default function ConfigurationManagementPage() {
                 open={isPopupOpen}
                 title="Assigned Product Lines"
                 message={popupMessage}
+                okLabel={assignedProductLinesPopup.buttonLabels[0]}
                 onOk={() => setIsPopupOpen(false)}
             />
         </div>

@@ -4,7 +4,6 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { ChevronDown, ChevronRight, GripVertical, Pencil, Plus, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
     Select,
     SelectContent,
@@ -55,6 +54,8 @@ type DualColumnMultiLevelListEditorProps<
     parentSupplementLabel?: string
     renderParentSupplement?: (parent: TParent) => ReactNode
     childSectionLabel?: string
+    childRowSupplementLabel?: string
+    renderChildRowSupplement?: (parent: TParent, child: TChild) => ReactNode
 }
 
 function sortableDisplayOrder(value: number | null | undefined): number {
@@ -83,7 +84,9 @@ export function DualColumnMultiLevelListEditor<
     showParentSupplement = false,
     parentSupplementLabel = "Details",
     renderParentSupplement,
-    childSectionLabel = "Items"
+    childSectionLabel = "Items",
+    childRowSupplementLabel = "Details",
+    renderChildRowSupplement
 }: DualColumnMultiLevelListEditorProps<TChild, TParent>) {
     const PARENT_LOCK_KEY = "parent"
     const [expandedSection, setExpandedSection] = useState<{
@@ -100,6 +103,7 @@ export function DualColumnMultiLevelListEditor<
     const [errorMessage, setErrorMessage] = useState("")
     const [activeEditorKey, setActiveEditorKey] = useState<string | null>(null)
     const newParentInputRef = useRef<HTMLInputElement | null>(null)
+    const editParentInputRef = useRef<HTMLInputElement | null>(null)
 
     const sortedParents = useMemo(() => {
         const clone = [...items]
@@ -326,7 +330,8 @@ export function DualColumnMultiLevelListEditor<
         activeEditorKey === null &&
         !isSavingParent &&
         !isCreatingParent
-    const showParentReorderHandle = Boolean(onReorderParents) && sortedParents.length > 1
+    const showParentReorderHandle =
+        Boolean(onReorderParents) && sortedParents.length > 1 && allParentsCollapsed
 
     const parentSortable = useSortableList(
         sortedParents,
@@ -358,6 +363,14 @@ export function DualColumnMultiLevelListEditor<
 
         newParentInputRef.current?.focus()
     }, [isAddingParent])
+
+    useEffect(() => {
+        if (editingParentId === null) {
+            return
+        }
+
+        editParentInputRef.current?.focus()
+    }, [editingParentId])
 
     if (sortedParents.length === 0 && !canAddParent) {
         return (
@@ -412,7 +425,7 @@ export function DualColumnMultiLevelListEditor<
                                 )}
                             >
                                 <div className="flex items-start gap-3">
-                                    {showParentReorderHandle && (
+                                    {Boolean(onReorderParents) && sortedParents.length > 1 ? (
                                         <Button
                                             type="button"
                                             variant="ghost"
@@ -424,27 +437,30 @@ export function DualColumnMultiLevelListEditor<
                                                         parentSortable.handleMouseDown(parent.id, event.nativeEvent)
                                                     : undefined
                                             }
-                                            aria-label="Reorder row"
+                                            aria-label={showParentReorderHandle ? "Reorder row" : undefined}
+                                            aria-hidden={!showParentReorderHandle}
+                                            tabIndex={showParentReorderHandle ? 0 : -1}
                                             className={cn(
-                                                "mt-1 text-muted-foreground",
+                                                "self-center bg-transparent text-muted-foreground shadow-none hover:bg-transparent",
                                                 parentReorderIsAvailable
                                                     ? "cursor-grab hover:text-foreground active:cursor-grabbing"
-                                                    : "cursor-not-allowed opacity-30"
+                                                    : "cursor-not-allowed opacity-30",
+                                                !showParentReorderHandle &&
+                                                    "pointer-events-none invisible"
                                             )}
                                         >
-                                            <GripVertical />
+                                            <GripVertical className="size-[1.3em]" />
                                         </Button>
-                                    )}
+                                    ) : null}
 
-                                    <div className="min-w-0 flex-1">
-                                        {isEditing ? (
-                                            <div className="space-y-3">
-                                                <div className="grid gap-2 md:grid-cols-2">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">
-                                                            Name
-                                                        </Label>
+                                    <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_72px] gap-x-2 gap-y-3">
+                                    <>
+                                        <div className="min-w-0 min-h-[44px]">
+                                            <div className="flex min-h-[44px] min-w-0 items-center gap-2">
+                                                <div className="min-w-0 flex-[2_1_0%]">
+                                                    {isEditing ? (
                                                         <Input
+                                                            ref={editParentInputRef}
                                                             type="text"
                                                             value={parentDraftName}
                                                             onChange={(event) =>
@@ -452,13 +468,23 @@ export function DualColumnMultiLevelListEditor<
                                                             }
                                                             className="w-full"
                                                         />
-                                                    </div>
+                                                    ) : (
+                                                        <div
+                                                            className={cn(
+                                                                "flex h-8 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm",
+                                                                interactionLocked && "text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            <span className="truncate font-medium">
+                                                                {parent.name}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">
-                                                            {secondaryColumn.label}
-                                                        </Label>
-                                                        {secondaryColumn.inputType === "select" ? (
+                                                <div className="min-w-[180px] flex-[1_0_0%]">
+                                                    {isEditing ? (
+                                                        secondaryColumn.inputType === "select" ? (
                                                             <Select
                                                                 value={secondaryDraftValue}
                                                                 onValueChange={setSecondaryDraftValue}
@@ -484,286 +510,180 @@ export function DualColumnMultiLevelListEditor<
                                                                 }
                                                                 className="w-full"
                                                             />
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex max-w-full min-w-0 flex-col gap-1">
-                                                    {hasSupplementSection ? (
-                                                        <div
-                                                            className={cn(
-                                                                "space-y-2 rounded-md border border-border/60 px-2 py-1",
-                                                                isSupplementExpanded && "bg-muted/10"
-                                                            )}
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleSupplementExpanded(parent.id)}
-                                                                disabled={interactionLocked}
-                                                                className={cn(
-                                                                    toggleButtonClass,
-                                                                    "hover:text-foreground disabled:cursor-default disabled:opacity-50"
-                                                                )}
-                                                                aria-label={
-                                                                    isSupplementExpanded
-                                                                        ? `Collapse ${parentSupplementLabel}`
-                                                                        : `Expand ${parentSupplementLabel}`
-                                                                }
-                                                            >
-                                                                {isSupplementExpanded ? <ChevronDown /> : <ChevronRight />}
-                                                                <span className="text-xs font-medium uppercase tracking-[0.14em]">
-                                                                    {parentSupplementLabel}
-                                                                </span>
-                                                            </button>
-
-                                                            {isSupplementExpanded ? (
-                                                                <div className="border-t pt-3">
-                                                                    {parentSupplement}
-                                                                </div>
-                                                            ) : null}
+                                                        )
+                                                    ) : (
+                                                        <div className="flex h-8 items-center justify-between gap-1.5 rounded-lg border border-transparent py-2 pr-2 pl-2.5 text-sm text-muted-foreground">
+                                                            <span className="min-w-0 truncate">
+                                                                {secondaryDisplayValue || "N/A"}
+                                                            </span>
                                                         </div>
-                                                    ) : null}
-
-                                                    {showOptionsSection ? (
-                                                        <div
-                                                            className={cn(
-                                                                "space-y-2 rounded-md border border-border/60 px-2 py-1",
-                                                                isChildExpanded && "bg-muted/10"
-                                                            )}
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleChildExpanded(parent)}
-                                                                disabled={interactionLocked || !canExpand}
-                                                                className={cn(
-                                                                    toggleButtonClass,
-                                                                    canExpand
-                                                                        ? "hover:text-foreground"
-                                                                        : "cursor-default opacity-50"
-                                                                )}
-                                                                aria-label={
-                                                                    isChildExpanded
-                                                                        ? `Collapse ${childSectionLabel}`
-                                                                        : `Expand ${childSectionLabel}`
-                                                                }
-                                                            >
-                                                                {isChildExpanded ? <ChevronDown /> : <ChevronRight />}
-                                                                <span className="text-xs font-medium uppercase tracking-[0.14em]">
-                                                                    {childSectionLabel}
-                                                                </span>
-                                                            </button>
-
-                                                            {isChildExpanded && showChildren && !isDraggingRow ? (
-                                                                <div className="border-l pl-4">
-                                                                    <ListEditor<TChild>
-                                                                        items={parent.children}
-                                                                        sortField="displayOrder"
-                                                                        editableField="name"
-                                                                        interactionLocked={
-                                                                            interactionLocked ||
-                                                                            Boolean(
-                                                                                activeEditorKey &&
-                                                                                activeEditorKey !== `child:${parent.id}`
-                                                                            )
-                                                                        }
-                                                                        onActiveStateChange={(isActive) =>
-                                                                            handleChildActiveStateChange(
-                                                                                `child:${parent.id}`,
-                                                                                isActive
-                                                                            )
-                                                                        }
-                                                                        onSave={
-                                                                            onSaveChild
-                                                                                ? (child, newValue) =>
-                                                                                    onSaveChild(parent, child, newValue)
-                                                                                : undefined
-                                                                        }
-                                                                        onCreate={
-                                                                            onCreateChild
-                                                                                ? (newValue) =>
-                                                                                    onCreateChild(parent, newValue)
-                                                                                : undefined
-                                                                        }
-                                                                        reorder={
-                                                                            onReorderChildren
-                                                                                ? {
-                                                                                    onReorder: (children) =>
-                                                                                        onReorderChildren(parent, children)
-                                                                                }
-                                                                                : undefined
-                                                                        }
-                                                                        addButtonLabel={addChildLabel}
-                                                                        emptyMessage="No child rows for this parent."
-                                                                    />
-                                                                </div>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : null}
+                                                    )}
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                <div className="space-y-1">
-                                                    <div
-                                                        className={cn(
-                                                            "truncate font-medium",
-                                                            interactionLocked && "text-muted-foreground"
-                                                        )}
-                                                    >
-                                                        {parent.name}
-                                                    </div>
-                                                    <div className="truncate text-sm text-muted-foreground">
-                                                        {secondaryDisplayValue || "N/A"}
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex max-w-full min-w-0 flex-col gap-1">
-                                                    {hasSupplementSection ? (
-                                                        <div
-                                                            className={cn(
-                                                                "space-y-2 rounded-md border border-border/60 px-2 py-1",
-                                                                isSupplementExpanded && "bg-muted/10"
-                                                            )}
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleSupplementExpanded(parent.id)}
-                                                                disabled={interactionLocked}
-                                                                className={cn(
-                                                                    toggleButtonClass,
-                                                                    "hover:text-foreground disabled:cursor-default disabled:opacity-50"
-                                                                )}
-                                                                aria-label={
-                                                                    isSupplementExpanded
-                                                                        ? `Collapse ${parentSupplementLabel}`
-                                                                        : `Expand ${parentSupplementLabel}`
-                                                                }
-                                                            >
-                                                                {isSupplementExpanded ? <ChevronDown /> : <ChevronRight />}
-                                                                <span className="text-xs font-medium uppercase tracking-[0.14em]">
-                                                                    {parentSupplementLabel}
-                                                                </span>
-                                                            </button>
-
-                                                            {isSupplementExpanded ? (
-                                                                <div className="border-t pt-3">
-                                                                    {parentSupplement}
-                                                                </div>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : null}
-
-                                                    {showOptionsSection ? (
-                                                        <div
-                                                            className={cn(
-                                                                "space-y-2 rounded-md border border-border/60 px-2 py-1",
-                                                                isChildExpanded && "bg-muted/10"
-                                                            )}
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleChildExpanded(parent)}
-                                                                disabled={interactionLocked || !canExpand}
-                                                                className={cn(
-                                                                    toggleButtonClass,
-                                                                    canExpand
-                                                                        ? "hover:text-foreground"
-                                                                        : "cursor-default opacity-50"
-                                                                )}
-                                                                aria-label={
-                                                                    isChildExpanded
-                                                                        ? `Collapse ${childSectionLabel}`
-                                                                        : `Expand ${childSectionLabel}`
-                                                                }
-                                                            >
-                                                                {isChildExpanded ? <ChevronDown /> : <ChevronRight />}
-                                                                <span className="text-xs font-medium uppercase tracking-[0.14em]">
-                                                                    {childSectionLabel}
-                                                                </span>
-                                                            </button>
-
-                                                            {isChildExpanded && showChildren && !isDraggingRow ? (
-                                                                <div className="border-l pl-4">
-                                                                    <ListEditor<TChild>
-                                                                        items={parent.children}
-                                                                        sortField="displayOrder"
-                                                                        editableField="name"
-                                                                        interactionLocked={
-                                                                            interactionLocked ||
-                                                                            Boolean(
-                                                                                activeEditorKey &&
-                                                                                activeEditorKey !== `child:${parent.id}`
-                                                                            )
-                                                                        }
-                                                                        onActiveStateChange={(isActive) =>
-                                                                            handleChildActiveStateChange(
-                                                                                `child:${parent.id}`,
-                                                                                isActive
-                                                                            )
-                                                                        }
-                                                                        onSave={
-                                                                            onSaveChild
-                                                                                ? (child, newValue) =>
-                                                                                    onSaveChild(parent, child, newValue)
-                                                                                : undefined
-                                                                        }
-                                                                        onCreate={
-                                                                            onCreateChild
-                                                                                ? (newValue) =>
-                                                                                    onCreateChild(parent, newValue)
-                                                                                : undefined
-                                                                        }
-                                                                        reorder={
-                                                                            onReorderChildren
-                                                                                ? {
-                                                                                    onReorder: (children) =>
-                                                                                        onReorderChildren(parent, children)
-                                                                                }
-                                                                                : undefined
-                                                                        }
-                                                                        addButtonLabel={addChildLabel}
-                                                                        emptyMessage="No child rows for this parent."
-                                                                    />
-                                                                </div>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {isEditing ? (
-                                        <div className="flex items-center gap-2 pt-0.5">
-                                            <Button
-                                                type="button"
-                                                onClick={() => saveParent(parent)}
-                                                disabled={isSavingParent || !canSaveEditedParent}
-                                            >
-                                                <Save />
-                                                {isSavingParent ? "Saving..." : "Save"}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={cancelEditingParent}
-                                                disabled={isSavingParent}
-                                            >
-                                                <X />
-                                                Cancel
-                                            </Button>
                                         </div>
-                                    ) : canEditParent ? (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() => startEditingParent(parent)}
-                                            disabled={!canStartParentAction || isCreatingParent}
-                                        >
-                                            <Pencil />
-                                            Edit
-                                        </Button>
-                                    ) : null}
+
+                                        {isEditing ? (
+                                            <div className="flex items-center gap-2 self-center justify-self-end">
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={() => saveParent(parent)}
+                                                    disabled={isSavingParent || !canSaveEditedParent}
+                                                    aria-label={isSavingParent ? "Saving" : "Save changes"}
+                                                    className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                >
+                                                    <Save />
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    onClick={cancelEditingParent}
+                                                    disabled={isSavingParent}
+                                                    aria-label="Cancel editing"
+                                                    className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                >
+                                                    <X />
+                                                </Button>
+                                            </div>
+                                        ) : canEditParent ? (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                onClick={() => startEditingParent(parent)}
+                                                disabled={!canStartParentAction || isCreatingParent}
+                                                aria-label={`Edit ${parent.name}`}
+                                                className="self-center justify-self-end bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                >
+                                                    <Pencil />
+                                                </Button>
+                                        ) : (
+                                            <div className="w-[72px]" />
+                                        )}
+
+                                        <div className="col-span-2 flex min-w-0 flex-col gap-1">
+                                            {hasSupplementSection ? (
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2 rounded-md border border-border/60 px-2 py-1",
+                                                        isSupplementExpanded && "bg-muted/10"
+                                                    )}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleSupplementExpanded(parent.id)}
+                                                        disabled={interactionLocked}
+                                                        className={cn(
+                                                            toggleButtonClass,
+                                                            "hover:text-foreground disabled:cursor-default disabled:opacity-50"
+                                                        )}
+                                                        aria-label={
+                                                            isSupplementExpanded
+                                                                ? `Collapse ${parentSupplementLabel}`
+                                                                : `Expand ${parentSupplementLabel}`
+                                                        }
+                                                    >
+                                                        {isSupplementExpanded ? <ChevronDown /> : <ChevronRight />}
+                                                        <span className="text-xs font-medium uppercase tracking-[0.14em]">
+                                                            {parentSupplementLabel}
+                                                        </span>
+                                                    </button>
+
+                                                    {isSupplementExpanded ? (
+                                                        <div className="border-t pt-3">
+                                                            {parentSupplement}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            ) : null}
+
+                                            {showOptionsSection ? (
+                                                <div
+                                                    className={cn(
+                                                        "space-y-2 rounded-md border border-border/60 px-2 py-1",
+                                                        isChildExpanded && "bg-muted/10"
+                                                    )}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleChildExpanded(parent)}
+                                                        disabled={interactionLocked || !canExpand}
+                                                        className={cn(
+                                                            toggleButtonClass,
+                                                            canExpand
+                                                                ? "hover:text-foreground"
+                                                                : "cursor-default opacity-50"
+                                                        )}
+                                                        aria-label={
+                                                            isChildExpanded
+                                                                ? `Collapse ${childSectionLabel}`
+                                                                : `Expand ${childSectionLabel}`
+                                                        }
+                                                    >
+                                                        {isChildExpanded ? <ChevronDown /> : <ChevronRight />}
+                                                        <span className="text-xs font-medium uppercase tracking-[0.14em]">
+                                                            {childSectionLabel}
+                                                        </span>
+                                                    </button>
+
+                                                    {isChildExpanded && showChildren && !isDraggingRow ? (
+                                                        <div className="pl-4">
+                                                            <ListEditor<TChild>
+                                                                items={parent.children}
+                                                                sortField="displayOrder"
+                                                                editableField="name"
+                                                                interactionLocked={
+                                                                    interactionLocked ||
+                                                                    Boolean(
+                                                                        activeEditorKey &&
+                                                                        activeEditorKey !== `child:${parent.id}`
+                                                                    )
+                                                                }
+                                                                onActiveStateChange={(isActive) =>
+                                                                    handleChildActiveStateChange(
+                                                                        `child:${parent.id}`,
+                                                                        isActive
+                                                                    )
+                                                                }
+                                                                onSave={
+                                                                    onSaveChild
+                                                                        ? (child, newValue) =>
+                                                                            onSaveChild(parent, child, newValue)
+                                                                        : undefined
+                                                                }
+                                                                onCreate={
+                                                                    onCreateChild
+                                                                        ? (newValue) =>
+                                                                            onCreateChild(parent, newValue)
+                                                                        : undefined
+                                                                }
+                                                                reorder={
+                                                                    onReorderChildren
+                                                                        ? {
+                                                                            onReorder: (children) =>
+                                                                                onReorderChildren(parent, children)
+                                                                        }
+                                                                        : undefined
+                                                                }
+                                                                rowSupplementLabel={childRowSupplementLabel}
+                                                                renderRowSupplement={
+                                                                    renderChildRowSupplement
+                                                                        ? (child) =>
+                                                                            renderChildRowSupplement(parent, child)
+                                                                        : undefined
+                                                                }
+                                                                addButtonLabel={addChildLabel}
+                                                                emptyMessage="No child rows for this parent."
+                                                            />
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </>
+                                    </div>
                                 </div>
 
                             </div>

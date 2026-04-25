@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { GripVertical, Pencil, Plus, Save, X } from "lucide-react"
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { ChevronDown, ChevronRight, GripVertical, Pencil, Plus, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useSortableList } from "@/hooks/useSortableList"
@@ -19,6 +19,8 @@ type ListEditorProps<T extends { id: string }> = {
     onActiveStateChange?: (isActive: boolean) => void
     addButtonLabel?: string
     emptyMessage?: string
+    rowSupplementLabel?: string
+    renderRowSupplement?: (row: T) => ReactNode
     reorder?: {
         onReorder: (items: T[]) => void
     }
@@ -41,15 +43,19 @@ export function ListEditor<T extends { id: string }>({
     onActiveStateChange,
     addButtonLabel = "Add",
     emptyMessage = "No rows to display.",
+    rowSupplementLabel = "Details",
+    renderRowSupplement,
     reorder
 }: ListEditorProps<T>) {
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [expandedSupplementRowId, setExpandedSupplementRowId] = useState<string | null>(null)
     const [draftValue, setDraftValue] = useState("")
     const [isAdding, setIsAdding] = useState(false)
     const [newDraftValue, setNewDraftValue] = useState("")
     const [isSaving, setIsSaving] = useState(false)
     const [errorMessage, setErrorMessage] = useState("")
     const newRowInputRef = useRef<HTMLInputElement | null>(null)
+    const editRowInputRef = useRef<HTMLInputElement | null>(null)
 
     const sortedItems = useMemo(() => {
         const clone = [...items]
@@ -149,12 +155,30 @@ export function ListEditor<T extends { id: string }>({
     const sortable = useSortableList(sortedItems, reorder?.onReorder, canReorder)
 
     useEffect(() => {
+        setExpandedSupplementRowId((current) => {
+            if (!current) {
+                return current
+            }
+
+            return sortedItems.some((row) => row.id === current) ? current : null
+        })
+    }, [sortedItems])
+
+    useEffect(() => {
         if (!isAdding) {
             return
         }
 
         newRowInputRef.current?.focus()
     }, [isAdding])
+
+    useEffect(() => {
+        if (editingId === null) {
+            return
+        }
+
+        editRowInputRef.current?.focus()
+    }, [editingId])
 
     useEffect(() => {
         onActiveStateChange?.(hasLocalActiveEditor)
@@ -176,86 +200,166 @@ export function ListEditor<T extends { id: string }>({
             {sortedItems.map((row) => {
                 const isEditing = editingId === row.id
                 const isDraggingRow = canReorder && sortable.draggingId === row.id
+                const rowSupplement = renderRowSupplement?.(row)
+                const hasRowSupplement = Boolean(rowSupplement)
+                const isSupplementExpanded = expandedSupplementRowId === row.id
 
                 return (
                     <div key={row.id} className="space-y-2">
                         <div
                             ref={canReorder ? (node) => sortable.setItemElement(row.id, node) : undefined}
                             className={cn(
-                                "flex items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm transition-[transform,box-shadow,background-color,opacity]",
+                                "rounded-lg border bg-card px-3 py-[11px] shadow-sm transition-[transform,box-shadow,background-color,opacity]",
                                 !isDraggingRow && "hover:bg-muted/30",
                                 isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                             )}
                         >
-                            <div className={cn("min-w-0 flex-1", showReorderHandle && "flex items-center gap-3")}>
-                                {showReorderHandle && (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        disabled={!canReorder}
-                                        onMouseDown={
-                                            canReorder
-                                                ? (event) => sortable.handleMouseDown(row.id, event.nativeEvent)
-                                                : undefined
-                                        }
-                                        aria-label="Reorder row"
-                                        className={cn(
-                                            "text-muted-foreground",
-                                            canReorder
-                                                ? "cursor-grab hover:text-foreground active:cursor-grabbing"
-                                                : "cursor-not-allowed opacity-30"
+                            <div className="space-y-3">
+                                <div className="grid grid-cols-[minmax(0,1fr)_72px] items-center gap-3">
+                                    <div className={cn("min-w-0 flex-1", showReorderHandle && "flex items-center gap-3")}>
+                                        {showReorderHandle && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                disabled={!canReorder}
+                                                onMouseDown={
+                                                    canReorder
+                                                        ? (event) => sortable.handleMouseDown(row.id, event.nativeEvent)
+                                                        : undefined
+                                                }
+                                                aria-label="Reorder row"
+                                                className={cn(
+                                                    "text-muted-foreground",
+                                                    canReorder
+                                                        ? "cursor-grab hover:text-foreground active:cursor-grabbing"
+                                                        : "cursor-not-allowed opacity-30"
+                                                )}
+                                            >
+                                                <GripVertical />
+                                            </Button>
                                         )}
-                                    >
-                                        <GripVertical />
-                                    </Button>
-                                )}
 
-                                <div className="min-w-0 flex-1">
+                                        {hasRowSupplement && !isEditing ? (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setExpandedSupplementRowId((current) =>
+                                                        current === row.id ? null : row.id
+                                                    )
+                                                }
+                                                disabled={interactionLocked}
+                                                className={cn(
+                                                    "flex min-w-0 flex-1 items-center gap-2 text-left",
+                                                    interactionLocked && "cursor-default"
+                                                )}
+                                                aria-label={
+                                                    isSupplementExpanded
+                                                        ? `Collapse ${rowSupplementLabel}`
+                                                        : `Expand ${rowSupplementLabel}`
+                                                }
+                                            >
+                                                <span
+                                                    className="flex size-4 shrink-0 items-center justify-center"
+                                                    aria-hidden="true"
+                                                >
+                                                    {isSupplementExpanded ? (
+                                                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                                                    ) : (
+                                                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                                                    )}
+                                                </span>
+                                                <div
+                                                    className={cn(
+                                                        "flex h-8 min-w-0 flex-1 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm font-medium",
+                                                        interactionLocked && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    <span className="truncate">
+                                                        {String((row[editableField] as EditableValue) ?? "")}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        ) : (
+                                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                {hasRowSupplement ? (
+                                                    <span
+                                                        className="flex size-4 shrink-0 items-center justify-center"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <ChevronRight className="invisible size-4 shrink-0 text-muted-foreground" />
+                                                    </span>
+                                                ) : null}
+
+                                                {isEditing ? (
+                                                    <Input
+                                                        ref={editRowInputRef}
+                                                        type="text"
+                                                        value={draftValue}
+                                                        onChange={(event) => setDraftValue(event.target.value)}
+                                                        className="w-full"
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        className={cn(
+                                                            "flex h-8 min-w-0 flex-1 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm font-medium",
+                                                            interactionLocked && "text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        <span className="truncate">
+                                                            {String((row[editableField] as EditableValue) ?? "")}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {isEditing ? (
-                                        <Input
-                                            type="text"
-                                            value={draftValue}
-                                            onChange={(event) => setDraftValue(event.target.value)}
-                                            className="w-full"
-                                        />
-                                    ) : (
-                                        <div
-                                            className={cn(
-                                                "truncate text-sm font-medium",
-                                                interactionLocked && "text-muted-foreground"
-                                            )}
-                                        >
-                                            {String((row[editableField] as EditableValue) ?? "")}
+                                        <div className="flex w-[72px] items-center justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                onClick={() => saveRow(row)}
+                                                disabled={isSaving || !canSaveEditedRow}
+                                                aria-label={isSaving ? "Saving" : "Save changes"}
+                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                            >
+                                                <Save />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-sm"
+                                                onClick={cancelEditing}
+                                                disabled={isSaving}
+                                                aria-label="Cancel editing"
+                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                            >
+                                                <X />
+                                            </Button>
                                         </div>
+                                    ) : canEdit ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            onClick={() => startEditing(row)}
+                                            disabled={!canStartNewAction}
+                                            aria-label={`Edit ${String((row[editableField] as EditableValue) ?? "")}`}
+                                            className="justify-self-end self-center bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                        >
+                                            <Pencil />
+                                        </Button>
+                                    ) : (
+                                        <div className="w-[72px]" />
                                     )}
                                 </div>
-                            </div>
 
-                            {isEditing ? (
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        onClick={() => saveRow(row)}
-                                        disabled={isSaving || !canSaveEditedRow}
-                                    >
-                                        <Save />
-                                        {isSaving ? "Saving..." : "Save"}
-                                    </Button>
-                                    <Button variant="outline" onClick={cancelEditing} disabled={isSaving}>
-                                        <X />
-                                        Cancel
-                                    </Button>
-                                </div>
-                            ) : canEdit ? (
-                                <Button
-                                    variant="outline"
-                                    onClick={() => startEditing(row)}
-                                    disabled={!canStartNewAction}
-                                >
-                                    <Pencil />
-                                    Edit
-                                </Button>
-                            ) : null}
+                                {hasRowSupplement && isSupplementExpanded && !isEditing ? (
+                                    <div className="border-t pt-3">
+                                        {rowSupplement}
+                                    </div>
+                                ) : null}
+                            </div>
                         </div>
                     </div>
                 )

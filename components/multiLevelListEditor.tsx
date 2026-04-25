@@ -63,6 +63,7 @@ export function MultiLevelListEditor<
     const [errorMessage, setErrorMessage] = useState("")
     const [activeEditorKey, setActiveEditorKey] = useState<string | null>(null)
     const newParentInputRef = useRef<HTMLInputElement | null>(null)
+    const editParentInputRef = useRef<HTMLInputElement | null>(null)
 
     const sortedParents = useMemo(() => {
         const clone = [...items]
@@ -288,6 +289,14 @@ export function MultiLevelListEditor<
         newParentInputRef.current?.focus()
     }, [isAddingParent])
 
+    useEffect(() => {
+        if (editingParentId === null) {
+            return
+        }
+
+        editParentInputRef.current?.focus()
+    }, [editingParentId])
+
     if (sortedParents.length === 0 && !canAddParent) {
         return (
             <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -324,7 +333,7 @@ export function MultiLevelListEditor<
                                     isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                                 )}
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_72px] items-center gap-3">
                                     {showParentReorderHandle && (
                                         <Button
                                             type="button"
@@ -339,7 +348,7 @@ export function MultiLevelListEditor<
                                             }
                                             aria-label="Reorder row"
                                             className={cn(
-                                                "text-muted-foreground",
+                                                "self-center text-muted-foreground",
                                                 parentReorderIsAvailable
                                                     ? "cursor-grab hover:text-foreground active:cursor-grabbing"
                                                     : "cursor-not-allowed opacity-30"
@@ -356,18 +365,19 @@ export function MultiLevelListEditor<
                                             size="sm"
                                             onClick={() => toggleExpanded(parent)}
                                             disabled={interactionLocked}
-                                            className="w-8 px-0"
+                                            className="self-center w-8 px-0"
                                             aria-label={isExpanded ? "Collapse row" : "Expand row"}
                                         >
                                             {isExpanded ? <ChevronDown /> : <ChevronRight />}
                                         </Button>
                                     ) : (
-                                        <span className="w-8 shrink-0" aria-hidden="true" />
+                                        <span className="self-center w-8 shrink-0" aria-hidden="true" />
                                     )}
 
-                                    <div className="min-w-0 flex-1">
+                                    <div className="flex min-w-0 min-h-[44px] items-center">
                                         {isEditing ? (
                                             <Input
+                                                ref={editParentInputRef}
                                                 type="text"
                                                 value={parentDraftName}
                                                 onChange={(event) => setParentDraftName(event.target.value)}
@@ -376,46 +386,55 @@ export function MultiLevelListEditor<
                                         ) : (
                                             <div
                                                 className={cn(
-                                                    "truncate text-sm font-medium",
+                                                    "flex h-8 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm font-medium",
                                                     interactionLocked && "text-muted-foreground"
                                                 )}
                                             >
-                                                {parent.name}
+                                                <span className="truncate">{parent.name}</span>
                                             </div>
                                         )}
                                     </div>
 
                                     {isEditing ? (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex w-[72px] items-center justify-end gap-2">
                                             <Button
                                                 type="button"
+                                                variant="ghost"
+                                                size="icon-sm"
                                                 onClick={() => saveParent(parent)}
                                                 disabled={isSavingParent || !canSaveEditedParent}
+                                                aria-label={isSavingParent ? "Saving" : "Save changes"}
+                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                                             >
                                                 <Save />
-                                                {isSavingParent ? "Saving..." : "Save"}
                                             </Button>
                                             <Button
                                                 type="button"
-                                                variant="outline"
+                                                variant="ghost"
+                                                size="icon-sm"
                                                 onClick={cancelEditingParent}
                                                 disabled={isSavingParent}
+                                                aria-label="Cancel editing"
+                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                                             >
                                                 <X />
-                                                Cancel
                                             </Button>
                                         </div>
                                     ) : canEditParent ? (
                                         <Button
                                             type="button"
-                                            variant="outline"
+                                            variant="ghost"
+                                            size="icon-sm"
                                             onClick={() => startEditingParent(parent)}
                                             disabled={!canStartParentAction || isCreatingParent}
+                                            aria-label={`Edit ${parent.name}`}
+                                            className="justify-self-end self-center bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                                         >
                                             <Pencil />
-                                            Edit
                                         </Button>
-                                    ) : null}
+                                    ) : (
+                                        <div className="w-[72px]" />
+                                    )}
                                 </div>
 
                                 {isExpanded && showChildren && !isDraggingRow && (

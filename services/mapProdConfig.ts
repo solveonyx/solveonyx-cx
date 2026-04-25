@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase"
-import { MapProdConfig, MapProdLineConfig } from "@/types"
+import { MapModelConfig, MapProdConfig, MapProdLineConfig } from "@/types"
 
 // GET PRODUCT-CONFIG MAPPINGS
 export async function fetchMapProdConfigs(): Promise<MapProdConfig[]> {
@@ -56,6 +56,65 @@ export async function deleteMapProdConfig(
 
     if (error) {
         console.error("deleteMapProdConfig error:", error)
+        throw error
+    }
+}
+
+// GET MODEL-CONFIG MAPPINGS
+export async function fetchMapModelConfigs(): Promise<MapModelConfig[]> {
+    const { data, error } = await supabase
+        .from("map_model-config")
+        .select("model_id, config_id")
+
+    if (error) {
+        console.error("fetchMapModelConfigs error:", error)
+        throw error
+    }
+
+    return (data ?? []).map((row) => ({
+        modelId: row.model_id,
+        configId: row.config_id
+    }))
+}
+
+// CREATE MODEL-CONFIG MAPPING
+export async function createMapModelConfig(
+    modelId: string,
+    configId: string
+): Promise<MapModelConfig> {
+    const { data, error } = await supabase
+        .from("map_model-config")
+        .insert([{
+            model_id: modelId,
+            config_id: configId
+        }])
+        .select("model_id, config_id")
+        .single()
+
+    if (error) {
+        console.error("createMapModelConfig error:", error)
+        throw error
+    }
+
+    return {
+        modelId: data.model_id,
+        configId: data.config_id
+    }
+}
+
+// DELETE MODEL-CONFIG MAPPING
+export async function deleteMapModelConfig(
+    modelId: string,
+    configId: string
+): Promise<void> {
+    const { error } = await supabase
+        .from("map_model-config")
+        .delete()
+        .eq("model_id", modelId)
+        .eq("config_id", configId)
+
+    if (error) {
+        console.error("deleteMapModelConfig error:", error)
         throw error
     }
 }
