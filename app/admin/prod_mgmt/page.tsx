@@ -1,11 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useAppShellLock } from "@/components/app-shell-lock-provider"
 import { MultiLevelListEditor } from "@/components/multiLevelListEditor"
 import { SelectionGallery } from "@/components/selectionGallery"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { fetchProductHierarchy } from "@/services/productHierarchyService"
@@ -98,10 +97,6 @@ export default function ProductManagementPage() {
 
         loadHierarchy()
     }, [selectedProductId])
-
-    const selectedProductName = useMemo(() => {
-        return products.find((p) => p.id === selectedProductId)?.name ?? ""
-    }, [products, selectedProductId])
 
     const handleGalleryActiveStateChange = useCallback((isActive: boolean) => {
         setActiveEditorKey((current) => {
@@ -384,9 +379,6 @@ export default function ProductManagementPage() {
                                     Expand a line to edit its models. Collapse all rows to reorder product lines.
                                 </CardDescription>
                             </div>
-                            {selectedProductName && (
-                                <Badge variant="secondary">Showing: {selectedProductName}</Badge>
-                            )}
                         </div>
                     </CardHeader>
                     <CardContent className="min-h-0 flex-1 overflow-y-auto">

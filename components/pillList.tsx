@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EDITOR_LOCKED_SUBTLE_DIMMED_CLASS, EDITOR_MUTED_TEXT_CLASS } from "@/lib/editorInteractions"
 import { cn } from "@/lib/utils"
 
 type PillListItem = {
@@ -84,10 +85,14 @@ export function PillList<TItem extends PillListItem, TSelected = TItem>({
                         onClick={() => onToggle?.(item, isSelected)}
                         aria-pressed={isSelected}
                         className={cn(
-                            "w-auto max-w-full justify-start rounded-full px-2.5",
-                            isSelected
-                                ? "bg-black text-white hover:bg-black/90"
-                                : "bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground",
+                            "w-auto max-w-full justify-start rounded-full px-2.5 active:not-aria-[haspopup]:translate-y-0",
+                            disabled
+                                ? isSelected
+                                    ? EDITOR_LOCKED_SUBTLE_DIMMED_CLASS + " bg-black text-white"
+                                    : `${EDITOR_LOCKED_SUBTLE_DIMMED_CLASS} bg-muted/30 ${EDITOR_MUTED_TEXT_CLASS}`
+                                : isSelected
+                                    ? "bg-black text-white hover:bg-black/90"
+                                    : `bg-muted/30 ${EDITOR_MUTED_TEXT_CLASS} hover:bg-muted hover:text-foreground`,
                             pillClassName,
                             isSelected ? activePillClassName : inactivePillClassName
                         )}

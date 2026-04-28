@@ -1,6 +1,4 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function AdminHomePage() {
     return (
@@ -10,14 +8,6 @@ export default function AdminHomePage() {
                     <CardTitle className="text-2xl">SolveOnyx CX Admin</CardTitle>
                     <CardDescription>Jump into the tools that maintain product and configuration data.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-wrap gap-3">
-                    <Button asChild>
-                        <Link href="/admin/products-editor">Products</Link>
-                    </Button>
-                    <Button asChild variant="outline">
-                        <Link href="/admin/display_order">Display Order</Link>
-                    </Button>
-                </CardContent>
             </Card>
         </div>
     )

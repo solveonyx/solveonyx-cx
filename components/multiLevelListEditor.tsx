@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ListEditor } from "@/components/listEditor"
 import { useSortableList } from "@/hooks/useSortableList"
+import {
+    EDITOR_ICON_BUTTON_CLASS,
+    EDITOR_ICON_BUTTON_INTERACTIVE_CLASS,
+    EDITOR_LOCKED_DIMMED_CLASS,
+    EDITOR_MUTED_TEXT_CLASS,
+    hasActiveEditor,
+    isExpansionLocked,
+    isLockedByOtherEditor
+} from "@/lib/editorInteractions"
 import { cn } from "@/lib/utils"
 import { HierarchyEditorChild, HierarchyEditorParent } from "@/types"
 
@@ -124,7 +133,7 @@ export function MultiLevelListEditor<
     }, [isParentExpandable, sortedParents])
 
     const toggleExpanded = (parent: TParent) => {
-        if (interactionLocked) {
+        if (isExpansionLocked(interactionLocked, activeEditorKey)) {
             return
         }
 
@@ -133,15 +142,11 @@ export function MultiLevelListEditor<
         }
 
         setExpandedParentIds((current) => {
-            const next = new Set(current)
-
-            if (next.has(parent.id)) {
-                next.delete(parent.id)
-            } else {
-                next.add(parent.id)
+            if (current.has(parent.id)) {
+                return new Set()
             }
 
-            return next
+            return new Set([parent.id])
         })
     }
 
@@ -242,7 +247,8 @@ export function MultiLevelListEditor<
     const canEditParent = Boolean(onSaveParent)
     const canAddParent = Boolean(onCreateParent)
     const hasLocalParentActiveEditor = editingParentId !== null || isAddingParent
-    const parentIsLocked = interactionLocked || Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
+    const expansionIsLocked = isExpansionLocked(interactionLocked, activeEditorKey)
+    const parentIsLocked = isLockedByOtherEditor(interactionLocked, activeEditorKey, PARENT_LOCK_KEY)
     const canStartParentAction = !parentIsLocked && !hasLocalParentActiveEditor
     const canSaveNewParent = newParentName.trim().length > 0
     const canSaveEditedParent = parentDraftName.trim().length > 0
@@ -253,10 +259,11 @@ export function MultiLevelListEditor<
         sortedParents.length > 1 &&
         allParentsCollapsed &&
         !interactionLocked &&
-        activeEditorKey === null &&
+        !hasActiveEditor(activeEditorKey) &&
         !isSavingParent &&
         !isCreatingParent
-    const showParentReorderHandle = Boolean(onReorderParents) && sortedParents.length > 1
+    const showParentReorderHandle =
+        Boolean(onReorderParents) && sortedParents.length > 1 && allParentsCollapsed
 
     const parentSortable = useSortableList(
         sortedParents,
@@ -265,7 +272,7 @@ export function MultiLevelListEditor<
     )
 
     useEffect(() => {
-        onActiveStateChange?.(activeEditorKey !== null)
+        onActiveStateChange?.(hasActiveEditor(activeEditorKey))
     }, [activeEditorKey, onActiveStateChange])
 
     const handleChildActiveStateChange = (childKey: string, isActive: boolean) => {
@@ -329,12 +336,12 @@ export function MultiLevelListEditor<
                                 }
                                 className={cn(
                                     "rounded-lg border bg-card p-3 shadow-sm transition-[transform,box-shadow,background-color,opacity]",
-                                    !isDraggingRow && "hover:bg-muted/20",
+                                    !isDraggingRow && !expansionIsLocked && "hover:bg-muted/20",
                                     isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                                 )}
                             >
                                 <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_72px] items-center gap-3">
-                                    {showParentReorderHandle && (
+                                    {Boolean(onReorderParents) && sortedParents.length > 1 && (
                                         <Button
                                             type="button"
                                             variant="ghost"
@@ -346,12 +353,15 @@ export function MultiLevelListEditor<
                                                         parentSortable.handleMouseDown(parent.id, event.nativeEvent)
                                                     : undefined
                                             }
-                                            aria-label="Reorder row"
+                                            aria-label={showParentReorderHandle ? "Reorder row" : undefined}
+                                            aria-hidden={!showParentReorderHandle}
+                                            tabIndex={showParentReorderHandle ? 0 : -1}
                                             className={cn(
-                                                "self-center text-muted-foreground",
+                                                `self-center ${EDITOR_ICON_BUTTON_CLASS}`,
                                                 parentReorderIsAvailable
-                                                    ? "cursor-grab hover:text-foreground active:cursor-grabbing"
-                                                    : "cursor-not-allowed opacity-30"
+                                                    ? `cursor-grab ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS} active:cursor-grabbing`
+                                                    : "cursor-not-allowed opacity-30",
+                                                !showParentReorderHandle && "pointer-events-none invisible"
                                             )}
                                         >
                                             <GripVertical />
@@ -364,8 +374,13 @@ export function MultiLevelListEditor<
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => toggleExpanded(parent)}
-                                            disabled={interactionLocked}
-                                            className="self-center w-8 px-0"
+                                            disabled={expansionIsLocked}
+                                            className={cn(
+                                                `self-center w-8 px-0 ${EDITOR_ICON_BUTTON_CLASS}`,
+                                                expansionIsLocked
+                                                    ? EDITOR_LOCKED_DIMMED_CLASS
+                                                    : EDITOR_ICON_BUTTON_INTERACTIVE_CLASS
+                                            )}
                                             aria-label={isExpanded ? "Collapse row" : "Expand row"}
                                         >
                                             {isExpanded ? <ChevronDown /> : <ChevronRight />}
@@ -387,7 +402,7 @@ export function MultiLevelListEditor<
                                             <div
                                                 className={cn(
                                                     "flex h-8 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm font-medium",
-                                                    interactionLocked && "text-muted-foreground"
+                                                    expansionIsLocked && EDITOR_MUTED_TEXT_CLASS
                                                 )}
                                             >
                                                 <span className="truncate">{parent.name}</span>
@@ -404,7 +419,7 @@ export function MultiLevelListEditor<
                                                 onClick={() => saveParent(parent)}
                                                 disabled={isSavingParent || !canSaveEditedParent}
                                                 aria-label={isSavingParent ? "Saving" : "Save changes"}
-                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                className={`${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                             >
                                                 <Save />
                                             </Button>
@@ -415,7 +430,7 @@ export function MultiLevelListEditor<
                                                 onClick={cancelEditingParent}
                                                 disabled={isSavingParent}
                                                 aria-label="Cancel editing"
-                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                className={`${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                             >
                                                 <X />
                                             </Button>
@@ -428,7 +443,7 @@ export function MultiLevelListEditor<
                                             onClick={() => startEditingParent(parent)}
                                             disabled={!canStartParentAction || isCreatingParent}
                                             aria-label={`Edit ${parent.name}`}
-                                            className="justify-self-end self-center bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                            className={`justify-self-end self-center ${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                         >
                                             <Pencil />
                                         </Button>
@@ -438,14 +453,17 @@ export function MultiLevelListEditor<
                                 </div>
 
                                 {isExpanded && showChildren && !isDraggingRow && (
-                                    <div className="ml-8 mt-3 border-l pl-4">
+                                    <div className="ml-8 mt-3 pl-4">
                                         <ListEditor<TChild>
                                             items={parent.children}
                                             sortField="displayOrder"
                                             editableField="name"
                                             interactionLocked={
-                                                interactionLocked ||
-                                                Boolean(activeEditorKey && activeEditorKey !== `child:${parent.id}`)
+                                                isLockedByOtherEditor(
+                                                    interactionLocked,
+                                                    activeEditorKey,
+                                                    `child:${parent.id}`
+                                                )
                                             }
                                             onActiveStateChange={(isActive) =>
                                                 handleChildActiveStateChange(`child:${parent.id}`, isActive)

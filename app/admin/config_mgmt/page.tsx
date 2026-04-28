@@ -6,7 +6,6 @@ import { DualColumnMultiLevelListEditor } from "@/components/dualColumnMultiLeve
 import { PillList } from "@/components/pillList"
 import { Popup } from "@/components/popup"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { popupDefinitions } from "@/lib/popupDefinitions"
@@ -20,12 +19,15 @@ import {
 } from "@/services/configurableService"
 import {
     createMapModelConfig,
+    createMapModelConfigOption,
     createMapProdConfig,
     createMapProdLineConfig,
     deleteMapModelConfig,
+    deleteMapModelConfigOption,
     deleteMapProdConfig,
     deleteMapProdLineConfig,
     fetchMapModelConfigs,
+    fetchMapModelConfigOptions,
     fetchMapProdConfigs,
     fetchMapProdLineConfigs
 } from "@/services/mapProdConfig"
@@ -42,14 +44,6 @@ type ConfigMgmtParent = HierarchyEditorParent<ConfigMgmtChild> & {
 }
 
 const assignedProductLinesPopup = popupDefinitions.assignedProductLines
-const assignedModelsPopup = popupDefinitions.assignedModels
-const optionModelPlaceholderItems = [
-    { id: "placeholder-model-1", name: "Model A" },
-    { id: "placeholder-model-2", name: "Model B" },
-    { id: "placeholder-model-3", name: "Model C" },
-    { id: "placeholder-model-4", name: "Model D" }
-]
-
 function isSingleSelectConfig(line: ConfigMgmtParent): boolean {
     return line.configTypeName.trim().toLowerCase() === "single select"
 }
@@ -76,6 +70,12 @@ function toEditorItems(
 type AssignedProductsEditorProps = {
     configId: string
     products: Product[]
+    productLinesByProductId: Record<string, ProductLine[]>
+    modelsByProductLineId: Record<string, Model[]>
+    loadingProductLineIds: string[]
+    loadingModelProductLineIds: string[]
+    loadProductLines: (productId: string) => Promise<void>
+    loadModels: (productLineId: string) => Promise<void>
     selectedProductIds: string[]
     onToggleProduct: (configId: string, product: Product, isSelected: boolean) => Promise<void>
     selectedProductLineIds: string[]
@@ -94,6 +94,12 @@ type AssignedProductsEditorProps = {
 function AssignedProductsEditor({
     configId,
     products,
+    productLinesByProductId,
+    modelsByProductLineId,
+    loadingProductLineIds,
+    loadingModelProductLineIds,
+    loadProductLines,
+    loadModels,
     selectedProductIds,
     onToggleProduct,
     selectedProductLineIds,
@@ -104,57 +110,6 @@ function AssignedProductsEditor({
     ,
     isPersisting
 }: AssignedProductsEditorProps) {
-    const [productLinesByProductId, setProductLinesByProductId] = useState<Record<string, ProductLine[]>>({})
-    const [modelsByProductLineId, setModelsByProductLineId] = useState<Record<string, Model[]>>({})
-    const [loadingProductLineIds, setLoadingProductLineIds] = useState<string[]>([])
-    const [loadingModelProductLineIds, setLoadingModelProductLineIds] = useState<string[]>([])
-    const [popupMessage, setPopupMessage] = useState("")
-    const [isPopupOpen, setIsPopupOpen] = useState(false)
-
-    const loadProductLines = useCallback(async (productId: string) => {
-        setLoadingProductLineIds((current) =>
-            current.includes(productId) ? current : [...current, productId]
-        )
-
-        try {
-            const lines = await fetchProductLines(productId)
-            setProductLinesByProductId((current) => ({
-                ...current,
-                [productId]: lines
-            }))
-        } catch (error) {
-            console.error(`Failed to load product lines for product ${productId}:`, error)
-            setProductLinesByProductId((current) => ({
-                ...current,
-                [productId]: []
-            }))
-        } finally {
-            setLoadingProductLineIds((current) => current.filter((id) => id !== productId))
-        }
-    }, [])
-
-    const loadModels = useCallback(async (productLineId: string) => {
-        setLoadingModelProductLineIds((current) =>
-            current.includes(productLineId) ? current : [...current, productLineId]
-        )
-
-        try {
-            const models = await fetchModels(productLineId)
-            setModelsByProductLineId((current) => ({
-                ...current,
-                [productLineId]: models
-            }))
-        } catch (error) {
-            console.error(`Failed to load models for product line ${productLineId}:`, error)
-            setModelsByProductLineId((current) => ({
-                ...current,
-                [productLineId]: []
-            }))
-        } finally {
-            setLoadingModelProductLineIds((current) => current.filter((id) => id !== productLineId))
-        }
-    }, [])
-
     useEffect(() => {
         selectedProductIds.forEach((productId) => {
             if (productLinesByProductId[productId] || loadingProductLineIds.includes(productId)) {
@@ -211,37 +166,13 @@ function AssignedProductsEditor({
                 return
             }
 
-            if (isSelected) {
-                try {
-                    const models = modelsByProductLineId[line.id] ?? await fetchModels(line.id)
-                    const modelIdSet = new Set(models.map((model) => model.id))
-                    const hasAssignedModels = selectedModelIds.some((modelId) => modelIdSet.has(modelId))
-
-                    if (hasAssignedModels) {
-                        setPopupMessage(
-                            assignedModelsPopup.messageText.replace(
-                                "{productLineName}",
-                                line.name
-                            )
-                        )
-                        setIsPopupOpen(true)
-                        return
-                    }
-                } catch (error) {
-                    console.error("Failed to validate product line removal:", error)
-                    return
-                }
-            }
-
             await onToggleProductLine(configId, productId, line, isSelected)
         },
         [
             configId,
             interactionLocked,
             isPersisting,
-            modelsByProductLineId,
             onToggleProductLine,
-            selectedModelIds
         ]
     )
 
@@ -285,8 +216,8 @@ function AssignedProductsEditor({
     )
 
     return (
-        <div className="space-y-3">
-            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+        <div className="space-y-4">
+            <div className="px-1 py-1">
                 <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     Products
                 </p>
@@ -297,13 +228,13 @@ function AssignedProductsEditor({
                     onToggle={(product, isSelected) => {
                         void handleProductToggle(product, isSelected)
                     }}
-                    disabled={interactionLocked || isPersisting}
+                    disabled={interactionLocked}
                     emptyMessage="No products found."
                 />
             </div>
 
             {selectedProductIds.length > 0 ? (
-                <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                <div className="px-1 py-1">
                     <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                         Product Lines
                     </p>
@@ -338,7 +269,7 @@ function AssignedProductsEditor({
                                             onToggle={(line, isSelected) => {
                                                 void handleProductLineToggle(productId, line, isSelected)
                                             }}
-                                            disabled={interactionLocked || isPersisting}
+                                            disabled={interactionLocked}
                                             emptyMessage="No product lines found."
                                         />
                                     )}
@@ -350,7 +281,7 @@ function AssignedProductsEditor({
             ) : null}
 
             {selectedProductLineIds.length > 0 ? (
-                <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                <div className="px-1 py-1">
                     <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                         Models
                     </p>
@@ -375,7 +306,7 @@ function AssignedProductsEditor({
                                             onToggle={(model, isSelected) => {
                                                 void handleModelToggle(model, isSelected)
                                             }}
-                                            disabled={interactionLocked || isPersisting}
+                                            disabled={interactionLocked}
                                         />
                                     </div>
                                 )
@@ -384,14 +315,6 @@ function AssignedProductsEditor({
                     )}
                 </div>
             ) : null}
-
-            <Popup
-                open={isPopupOpen}
-                title="Assigned Models"
-                message={popupMessage}
-                okLabel={assignedModelsPopup.buttonLabels[0]}
-                onOk={() => setIsPopupOpen(false)}
-            />
         </div>
     )
 }
@@ -410,6 +333,13 @@ export default function ConfigurationManagementPage() {
     const [assignedModelIdsByConfigId, setAssignedModelIdsByConfigId] = useState<
         Record<string, string[]>
     >({})
+    const [assignedModelIdsByConfigOptionId, setAssignedModelIdsByConfigOptionId] = useState<
+        Record<string, string[]>
+    >({})
+    const [productLinesByProductId, setProductLinesByProductId] = useState<Record<string, ProductLine[]>>({})
+    const [modelsByProductLineId, setModelsByProductLineId] = useState<Record<string, Model[]>>({})
+    const [loadingProductLineIds, setLoadingProductLineIds] = useState<string[]>([])
+    const [loadingModelProductLineIds, setLoadingModelProductLineIds] = useState<string[]>([])
     const [persistingConfigIds, setPersistingConfigIds] = useState<string[]>([])
     const [defaultConfigTypeId, setDefaultConfigTypeId] = useState("")
     const [isLoading, setIsLoading] = useState(true)
@@ -418,6 +348,50 @@ export default function ConfigurationManagementPage() {
     const [popupMessage, setPopupMessage] = useState("")
     const [isPopupOpen, setIsPopupOpen] = useState(false)
     const { setNavigationLocked } = useAppShellLock()
+
+    const loadProductLines = useCallback(async (productId: string) => {
+        setLoadingProductLineIds((current) =>
+            current.includes(productId) ? current : [...current, productId]
+        )
+
+        try {
+            const lines = await fetchProductLines(productId)
+            setProductLinesByProductId((current) => ({
+                ...current,
+                [productId]: lines
+            }))
+        } catch (error) {
+            console.error(`Failed to load product lines for product ${productId}:`, error)
+            setProductLinesByProductId((current) => ({
+                ...current,
+                [productId]: []
+            }))
+        } finally {
+            setLoadingProductLineIds((current) => current.filter((id) => id !== productId))
+        }
+    }, [])
+
+    const loadModels = useCallback(async (productLineId: string) => {
+        setLoadingModelProductLineIds((current) =>
+            current.includes(productLineId) ? current : [...current, productLineId]
+        )
+
+        try {
+            const models = await fetchModels(productLineId)
+            setModelsByProductLineId((current) => ({
+                ...current,
+                [productLineId]: models
+            }))
+        } catch (error) {
+            console.error(`Failed to load models for product line ${productLineId}:`, error)
+            setModelsByProductLineId((current) => ({
+                ...current,
+                [productLineId]: []
+            }))
+        } finally {
+            setLoadingModelProductLineIds((current) => current.filter((id) => id !== productLineId))
+        }
+    }, [])
 
     useEffect(() => {
         const loadData = async () => {
@@ -431,14 +405,16 @@ export default function ConfigurationManagementPage() {
                     hierarchyResult,
                     prodConfigMappings,
                     prodLineConfigMappings,
-                    modelConfigMappings
+                    modelConfigMappings,
+                    modelConfigOptionMappings
                 ] = await Promise.all([
                     fetchProducts(),
                     fetchConfigTypes(),
                     fetchConfigHierarchy(),
                     fetchMapProdConfigs(),
                     fetchMapProdLineConfigs(),
-                    fetchMapModelConfigs()
+                    fetchMapModelConfigs(),
+                    fetchMapModelConfigOptions()
                 ])
 
                 const configTypeNameById = new Map(
@@ -468,12 +444,21 @@ export default function ConfigurationManagementPage() {
                     },
                     {}
                 )
+                const nextAssignedModelIdsByConfigOptionId = modelConfigOptionMappings.reduce<Record<string, string[]>>(
+                    (accumulator, mapping) => {
+                        const currentModelIds = accumulator[mapping.configOptionId] ?? []
+                        accumulator[mapping.configOptionId] = [...currentModelIds, mapping.modelId]
+                        return accumulator
+                    },
+                    {}
+                )
                 setProducts(products)
                 setConfigLines(toEditorItems(hierarchyResult, configTypeNameById))
                 setConfigTypes(configTypesResult)
                 setAssignedProductIdsByConfigId(nextAssignedProductIdsByConfigId)
                 setAssignedProductLineIdsByConfigId(nextAssignedProductLineIdsByConfigId)
                 setAssignedModelIdsByConfigId(nextAssignedModelIdsByConfigId)
+                setAssignedModelIdsByConfigOptionId(nextAssignedModelIdsByConfigOptionId)
                 setDefaultConfigTypeId(configTypesResult[0]?.id ?? "")
             } catch (error) {
                 console.error("Failed to load configuration hierarchy:", error)
@@ -485,6 +470,47 @@ export default function ConfigurationManagementPage() {
 
         loadData()
     }, [])
+
+    useEffect(() => {
+        const productIdsToLoad = new Set(
+            Object.values(assignedProductIdsByConfigId).flat()
+        )
+
+        productIdsToLoad.forEach((productId) => {
+            if (productLinesByProductId[productId] || loadingProductLineIds.includes(productId)) {
+                return
+            }
+
+            void loadProductLines(productId)
+        })
+    }, [
+        assignedProductIdsByConfigId,
+        loadProductLines,
+        loadingProductLineIds,
+        productLinesByProductId
+    ])
+
+    useEffect(() => {
+        const productLineIdsToLoad = new Set(
+            Object.values(assignedProductLineIdsByConfigId).flat()
+        )
+
+        productLineIdsToLoad.forEach((productLineId) => {
+            if (
+                modelsByProductLineId[productLineId] ||
+                loadingModelProductLineIds.includes(productLineId)
+            ) {
+                return
+            }
+
+            void loadModels(productLineId)
+        })
+    }, [
+        assignedProductLineIdsByConfigId,
+        loadModels,
+        loadingModelProductLineIds,
+        modelsByProductLineId
+    ])
 
     const saveConfigName = async (line: ConfigMgmtParent, newName: string) => {
         const trimmedName = newName.trim()
@@ -684,6 +710,96 @@ export default function ConfigurationManagementPage() {
         [assignedProductLineIdsByConfigId]
     )
 
+    const removeModelOptionAssignmentsForConfig = useCallback(
+        async (configId: string, modelIds: string[]) => {
+            if (modelIds.length === 0) {
+                return
+            }
+
+            const configOptions = configLines.find((line) => line.id === configId)?.children ?? []
+            const optionIds = configOptions.map((option) => option.id)
+
+            if (optionIds.length === 0) {
+                return
+            }
+
+            const deleteOperations: Promise<void>[] = []
+
+            optionIds.forEach((optionId) => {
+                const assignedModelIds = assignedModelIdsByConfigOptionId[optionId] ?? []
+
+                assignedModelIds
+                    .filter((modelId) => modelIds.includes(modelId))
+                    .forEach((modelId) => {
+                        deleteOperations.push(deleteMapModelConfigOption(modelId, optionId))
+                    })
+            })
+
+            if (deleteOperations.length === 0) {
+                return
+            }
+
+            await Promise.all(deleteOperations)
+
+            setAssignedModelIdsByConfigOptionId((current) => {
+                const next = { ...current }
+
+                optionIds.forEach((optionId) => {
+                    next[optionId] = (next[optionId] ?? []).filter((modelId) => !modelIds.includes(modelId))
+                })
+
+                return next
+            })
+        },
+        [assignedModelIdsByConfigOptionId, configLines]
+    )
+
+    const addModelOptionAssignmentsForConfig = useCallback(
+        async (configId: string, modelIds: string[]) => {
+            if (modelIds.length === 0) {
+                return
+            }
+
+            const configOptions = configLines.find((line) => line.id === configId)?.children ?? []
+            const optionIds = configOptions.map((option) => option.id)
+
+            if (optionIds.length === 0) {
+                return
+            }
+
+            const createOperations: Promise<unknown>[] = []
+
+            optionIds.forEach((optionId) => {
+                const assignedModelIdSet = new Set(assignedModelIdsByConfigOptionId[optionId] ?? [])
+
+                modelIds
+                    .filter((modelId) => !assignedModelIdSet.has(modelId))
+                    .forEach((modelId) => {
+                        createOperations.push(createMapModelConfigOption(modelId, optionId))
+                    })
+            })
+
+            if (createOperations.length === 0) {
+                return
+            }
+
+            await Promise.all(createOperations)
+
+            setAssignedModelIdsByConfigOptionId((current) => {
+                const next = { ...current }
+
+                optionIds.forEach((optionId) => {
+                    const nextIds = new Set(next[optionId] ?? [])
+                    modelIds.forEach((modelId) => nextIds.add(modelId))
+                    next[optionId] = [...nextIds]
+                })
+
+                return next
+            })
+        },
+        [assignedModelIdsByConfigOptionId, configLines]
+    )
+
     const handleAssignedProductLineToggle = useCallback(
         async (configId: string, _productId: string, line: ProductLine, isSelected: boolean) => {
             setErrorMessage("")
@@ -692,18 +808,48 @@ export default function ConfigurationManagementPage() {
             )
 
             try {
+                const modelsForLine = await fetchModels(line.id)
+                const modelIdsForLine = modelsForLine.map((model) => model.id)
+                setModelsByProductLineId((current) => ({
+                    ...current,
+                    [line.id]: modelsForLine
+                }))
+
                 if (isSelected) {
-                    await deleteMapProdLineConfig(line.id, configId)
+                    await Promise.all([
+                        deleteMapProdLineConfig(line.id, configId),
+                        ...modelIdsForLine.map((modelId) => deleteMapModelConfig(modelId, configId))
+                    ])
+                    await removeModelOptionAssignmentsForConfig(configId, modelIdsForLine)
+
                     setAssignedProductLineIdsByConfigId((current) => ({
                         ...current,
                         [configId]: (current[configId] ?? []).filter((id) => id !== line.id)
                     }))
+                    setAssignedModelIdsByConfigId((current) => ({
+                        ...current,
+                        [configId]: (current[configId] ?? []).filter((id) => !modelIdsForLine.includes(id))
+                    }))
                 } else {
-                    await createMapProdLineConfig(line.id, configId)
+                    await Promise.all([
+                        createMapProdLineConfig(line.id, configId),
+                        ...modelsForLine.map((model) => createMapModelConfig(model.id, configId))
+                    ])
+                    await addModelOptionAssignmentsForConfig(configId, modelIdsForLine)
+
                     setAssignedProductLineIdsByConfigId((current) => ({
                         ...current,
                         [configId]: [...(current[configId] ?? []), line.id]
                     }))
+                    setAssignedModelIdsByConfigId((current) => {
+                        const nextIds = new Set(current[configId] ?? [])
+                        modelIdsForLine.forEach((modelId) => nextIds.add(modelId))
+
+                        return {
+                            ...current,
+                            [configId]: [...nextIds]
+                        }
+                    })
                 }
             } catch (error) {
                 console.error("Failed to persist product-line-config mapping:", error)
@@ -712,7 +858,7 @@ export default function ConfigurationManagementPage() {
                 setPersistingConfigIds((current) => current.filter((id) => id !== configId))
             }
         },
-        []
+        [addModelOptionAssignmentsForConfig, removeModelOptionAssignmentsForConfig]
     )
 
     const handleAssignedModelToggle = useCallback(
@@ -725,12 +871,14 @@ export default function ConfigurationManagementPage() {
             try {
                 if (isSelected) {
                     await deleteMapModelConfig(model.id, configId)
+                    await removeModelOptionAssignmentsForConfig(configId, [model.id])
                     setAssignedModelIdsByConfigId((current) => ({
                         ...current,
                         [configId]: (current[configId] ?? []).filter((id) => id !== model.id)
                     }))
                 } else {
                     await createMapModelConfig(model.id, configId)
+                    await addModelOptionAssignmentsForConfig(configId, [model.id])
                     setAssignedModelIdsByConfigId((current) => ({
                         ...current,
                         [configId]: [...(current[configId] ?? []), model.id]
@@ -743,8 +891,66 @@ export default function ConfigurationManagementPage() {
                 setPersistingConfigIds((current) => current.filter((id) => id !== configId))
             }
         },
+        [addModelOptionAssignmentsForConfig, removeModelOptionAssignmentsForConfig]
+    )
+
+    const handleAssignedModelOptionToggle = useCallback(
+        async (configOptionId: string, model: Model, isSelected: boolean) => {
+            setErrorMessage("")
+
+            try {
+                if (isSelected) {
+                    await deleteMapModelConfigOption(model.id, configOptionId)
+                    setAssignedModelIdsByConfigOptionId((current) => ({
+                        ...current,
+                        [configOptionId]: (current[configOptionId] ?? []).filter((id) => id !== model.id)
+                    }))
+                } else {
+                    await createMapModelConfigOption(model.id, configOptionId)
+                    setAssignedModelIdsByConfigOptionId((current) => ({
+                        ...current,
+                        [configOptionId]: [...(current[configOptionId] ?? []), model.id]
+                    }))
+                }
+            } catch (error) {
+                console.error("Failed to persist model-config option mapping:", error)
+                setErrorMessage("Unable to update option model assignments.")
+            }
+        },
         []
     )
+
+    const getAssignedModelGroupsForConfig = useCallback((configId: string) => {
+        const assignedModelIdSet = new Set(assignedModelIdsByConfigId[configId] ?? [])
+        const productLines = Object.values(productLinesByProductId)
+            .flat()
+            .sort((a, b) => {
+                if (a.displayOrder !== b.displayOrder) {
+                    return a.displayOrder - b.displayOrder
+                }
+
+                return a.id.localeCompare(b.id)
+            })
+
+        return productLines
+            .map((productLine) => {
+                const models = [...(modelsByProductLineId[productLine.id] ?? [])]
+                    .filter((model) => assignedModelIdSet.has(model.id))
+                    .sort((a, b) => {
+                        if (a.displayOrder !== b.displayOrder) {
+                            return a.displayOrder - b.displayOrder
+                        }
+
+                        return a.id.localeCompare(b.id)
+                    })
+
+                return {
+                    productLine,
+                    models
+                }
+            })
+            .filter(({ models }) => models.length > 0)
+    }, [assignedModelIdsByConfigId, modelsByProductLineId, productLinesByProductId])
 
     const reorderConfigs = async (reorderedItems: ConfigMgmtParent[]) => {
         const previous = configLines
@@ -856,24 +1062,58 @@ export default function ConfigurationManagementPage() {
                             parentSupplementLabel="Assigned Products"
                             childSectionLabel="Options"
                             childRowSupplementLabel="Attached Models"
-                            renderChildRowSupplement={() => (
-                                <PillList
-                                    items={optionModelPlaceholderItems}
-                                    getItemLabel={(item) => item.name}
-                                    emptyMessage="No models available."
-                                />
-                            )}
+                            renderChildRowSupplement={(parent, child) => {
+                                const modelGroups = getAssignedModelGroupsForConfig(parent.id)
+
+                                return (
+                                    modelGroups.length > 0 ? (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                                Assigned Models
+                                            </p>
+                                            {modelGroups.map(({ productLine, models }, index) => (
+                                                <div
+                                                    key={productLine.id}
+                                                    className={index === 0 ? undefined : "pt-2"}
+                                                >
+                                                    <PillList
+                                                        items={models}
+                                                        selectedIds={assignedModelIdsByConfigOptionId[child.id] ?? []}
+                                                        getItemLabel={(model) => model.name}
+                                                        onToggle={(model, isSelected) => {
+                                                            void handleAssignedModelOptionToggle(child.id, model, isSelected)
+                                                        }}
+                                                        disabled={activeEditorKey !== null}
+                                                        emptyMessage="No models available."
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <PillList
+                                            items={[]}
+                                            emptyMessage="No models available."
+                                        />
+                                    )
+                                )
+                            }}
                             renderParentSupplement={(parent) => (
                                 <AssignedProductsEditor
                                     configId={parent.id}
                                     products={products}
+                                    productLinesByProductId={productLinesByProductId}
+                                    modelsByProductLineId={modelsByProductLineId}
+                                    loadingProductLineIds={loadingProductLineIds}
+                                    loadingModelProductLineIds={loadingModelProductLineIds}
+                                    loadProductLines={loadProductLines}
+                                    loadModels={loadModels}
                                     selectedProductIds={assignedProductIdsByConfigId[parent.id] ?? []}
                                     onToggleProduct={handleAssignedProductToggle}
                                     selectedProductLineIds={assignedProductLineIdsByConfigId[parent.id] ?? []}
                                     onToggleProductLine={handleAssignedProductLineToggle}
                                     selectedModelIds={assignedModelIdsByConfigId[parent.id] ?? []}
                                     onToggleModel={handleAssignedModelToggle}
-                                    interactionLocked={configEditorInteractionLocked}
+                                    interactionLocked={activeEditorKey !== null}
                                     isPersisting={persistingConfigIds.includes(parent.id)}
                                 />
                             )}
@@ -886,12 +1126,6 @@ export default function ConfigurationManagementPage() {
                     )}
                 </CardContent>
             </Card>
-
-            {activeEditorKey !== null && (
-                <Badge variant="outline" className="shrink-0">
-                    Editing active. Finish or cancel to unlock other actions.
-                </Badge>
-            )}
 
             {errorMessage && (
                 <Alert variant="destructive" className="shrink-0">

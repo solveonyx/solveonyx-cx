@@ -300,10 +300,6 @@ export function SelectionGallery<TItem extends GalleryItem>({
                                 onMouseEnter={() => {
                                     setHoveredItemId(itemId)
 
-                                    if (canReorder) {
-                                        sortable.handleMouseEnter(itemId)
-                                    }
-
                                     if (!hasHoverActions || disabled || editingId !== null || isAdding || !isSelected) {
                                         setRevealedActionItemId(null)
                                         clearHoverTimer()

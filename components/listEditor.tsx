@@ -4,6 +4,13 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, GripVertical, Pencil, Plus, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+    EDITOR_ICON_BUTTON_CLASS,
+    EDITOR_ICON_BUTTON_INTERACTIVE_CLASS,
+    EDITOR_LOCKED_SUBTLE_DIMMED_CLASS,
+    EDITOR_MUTED_TEXT_CLASS,
+    isSiblingEditorLocked
+} from "@/lib/editorInteractions"
 import { useSortableList } from "@/hooks/useSortableList"
 import { cn } from "@/lib/utils"
 
@@ -203,6 +210,11 @@ export function ListEditor<T extends { id: string }>({
                 const rowSupplement = renderRowSupplement?.(row)
                 const hasRowSupplement = Boolean(rowSupplement)
                 const isSupplementExpanded = expandedSupplementRowId === row.id
+                const rowInteractionLocked = isSiblingEditorLocked(
+                    interactionLocked,
+                    hasLocalActiveEditor,
+                    isEditing
+                )
 
                 return (
                     <div key={row.id} className="space-y-2">
@@ -210,7 +222,7 @@ export function ListEditor<T extends { id: string }>({
                             ref={canReorder ? (node) => sortable.setItemElement(row.id, node) : undefined}
                             className={cn(
                                 "rounded-lg border bg-card px-3 py-[11px] shadow-sm transition-[transform,box-shadow,background-color,opacity]",
-                                !isDraggingRow && "hover:bg-muted/30",
+                                !isDraggingRow && !rowInteractionLocked && "hover:bg-muted/30",
                                 isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                             )}
                         >
@@ -230,9 +242,9 @@ export function ListEditor<T extends { id: string }>({
                                                 }
                                                 aria-label="Reorder row"
                                                 className={cn(
-                                                    "text-muted-foreground",
+                                                    EDITOR_MUTED_TEXT_CLASS,
                                                     canReorder
-                                                        ? "cursor-grab hover:text-foreground active:cursor-grabbing"
+                                                        ? `cursor-grab ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS} active:cursor-grabbing`
                                                         : "cursor-not-allowed opacity-30"
                                                 )}
                                             >
@@ -248,10 +260,10 @@ export function ListEditor<T extends { id: string }>({
                                                         current === row.id ? null : row.id
                                                     )
                                                 }
-                                                disabled={interactionLocked}
+                                                disabled={rowInteractionLocked}
                                                 className={cn(
                                                     "flex min-w-0 flex-1 items-center gap-2 text-left",
-                                                    interactionLocked && "cursor-default"
+                                                    rowInteractionLocked && EDITOR_LOCKED_SUBTLE_DIMMED_CLASS
                                                 )}
                                                 aria-label={
                                                     isSupplementExpanded
@@ -260,19 +272,22 @@ export function ListEditor<T extends { id: string }>({
                                                 }
                                             >
                                                 <span
-                                                    className="flex size-4 shrink-0 items-center justify-center"
+                                                    className={cn(
+                                                        "flex size-4 shrink-0 items-center justify-center",
+                                                        rowInteractionLocked && EDITOR_MUTED_TEXT_CLASS
+                                                    )}
                                                     aria-hidden="true"
                                                 >
                                                     {isSupplementExpanded ? (
-                                                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                                                        <ChevronDown className={cn("size-4 shrink-0", EDITOR_MUTED_TEXT_CLASS)} />
                                                     ) : (
-                                                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                                                        <ChevronRight className={cn("size-4 shrink-0", EDITOR_MUTED_TEXT_CLASS)} />
                                                     )}
                                                 </span>
                                                 <div
                                                     className={cn(
                                                         "flex h-8 min-w-0 flex-1 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm font-medium",
-                                                        interactionLocked && "text-muted-foreground"
+                                                        rowInteractionLocked && EDITOR_MUTED_TEXT_CLASS
                                                     )}
                                                 >
                                                     <span className="truncate">
@@ -287,7 +302,7 @@ export function ListEditor<T extends { id: string }>({
                                                         className="flex size-4 shrink-0 items-center justify-center"
                                                         aria-hidden="true"
                                                     >
-                                                        <ChevronRight className="invisible size-4 shrink-0 text-muted-foreground" />
+                                                        <ChevronRight className={cn("invisible size-4 shrink-0", EDITOR_MUTED_TEXT_CLASS)} />
                                                     </span>
                                                 ) : null}
 
@@ -303,7 +318,7 @@ export function ListEditor<T extends { id: string }>({
                                                     <div
                                                         className={cn(
                                                             "flex h-8 min-w-0 flex-1 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm font-medium",
-                                                            interactionLocked && "text-muted-foreground"
+                                                            rowInteractionLocked && EDITOR_MUTED_TEXT_CLASS
                                                         )}
                                                     >
                                                         <span className="truncate">
@@ -323,7 +338,7 @@ export function ListEditor<T extends { id: string }>({
                                                 onClick={() => saveRow(row)}
                                                 disabled={isSaving || !canSaveEditedRow}
                                                 aria-label={isSaving ? "Saving" : "Save changes"}
-                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                className={`${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                             >
                                                 <Save />
                                             </Button>
@@ -333,7 +348,7 @@ export function ListEditor<T extends { id: string }>({
                                                 onClick={cancelEditing}
                                                 disabled={isSaving}
                                                 aria-label="Cancel editing"
-                                                className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                className={`${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                             >
                                                 <X />
                                             </Button>
@@ -345,7 +360,7 @@ export function ListEditor<T extends { id: string }>({
                                             onClick={() => startEditing(row)}
                                             disabled={!canStartNewAction}
                                             aria-label={`Edit ${String((row[editableField] as EditableValue) ?? "")}`}
-                                            className="justify-self-end self-center bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                            className={`justify-self-end self-center ${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                         >
                                             <Pencil />
                                         </Button>

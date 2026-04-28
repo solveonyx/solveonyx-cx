@@ -63,7 +63,6 @@ export function useSortableList<T extends { id: string }>(
     enabled = Boolean(onReorder)
 ) {
     const [draggingId, setDraggingId] = useState<string | null>(null)
-    const [dragOverId, setDragOverId] = useState<string | null>(null)
     const [dropIndex, setDropIndex] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
 
@@ -83,7 +82,6 @@ export function useSortableList<T extends { id: string }>(
     const dragOffsetRef = useRef(0)
     const dragStartScrollTopRef = useRef(0)
     const dropIndexRef = useRef<number | null>(null)
-    const dragOverIdRef = useRef<string | null>(null)
     const draggingElementRef = useRef<HTMLElement | null>(null)
     const appliedTransformRef = useRef(0)
     const originalDragElementStylesRef = useRef<DragElementStyles | null>(null)
@@ -294,7 +292,7 @@ export function useSortableList<T extends { id: string }>(
             return
         }
 
-        const toIndex = insertionIndex > startIndex ? insertionIndex - 1 : insertionIndex
+        const toIndex = insertionIndex
         const nextTransforms = new Map<string, number>()
 
         items.forEach((item, index) => {
@@ -325,55 +323,73 @@ export function useSortableList<T extends { id: string }>(
 
     const getDropFromClientY = useCallback((clientY: number) => {
         if (items.length === 0) {
-            return { nextDropIndex: null as number | null, nextDragOverId: null as string | null }
+            return { nextDropIndex: null as number | null }
         }
 
         const container = containerRef.current
         const containerBounds = containerBoundsRef.current
+        const metrics = itemMetricsRef.current
+        const startIndex = dragStartIndexRef.current
+        const draggedId = draggingIdRef.current
+        const draggedMetric = startIndex !== null ? metrics[startIndex] : null
+
+        if (!container || !containerBounds || startIndex === null || !draggedId || !draggedMetric) {
+            return {
+                nextDropIndex: 0
+            }
+        }
+
+        const draggedTop = draggedMetric.top + dragOffsetRef.current
+        const draggedHeight = draggedMetric.height
+        const probeYWithinContainer =
+            dragOffsetRef.current > 0
+                ? draggedTop + draggedHeight * 0.75
+                : dragOffsetRef.current < 0
+                    ? draggedTop + draggedHeight * 0.25
+                    : draggedTop + draggedHeight * 0.5
+
+        const nonDraggedMetrics = metrics.filter((metric) => metric.id !== draggedId)
+
+        if (nonDraggedMetrics.length === 0) {
+            return {
+                nextDropIndex: 0
+            }
+        }
+
         if (containerBounds) {
-            if (clientY <= containerBounds.top) {
+            if (clientY <= containerBounds.top || probeYWithinContainer <= nonDraggedMetrics[0].midpoint) {
                 return {
-                    nextDropIndex: 0,
-                    nextDragOverId: items[0]?.id ?? null
+                    nextDropIndex: 0
                 }
             }
 
-            if (clientY >= containerBounds.bottom) {
+            if (
+                clientY >= containerBounds.bottom ||
+                probeYWithinContainer >= nonDraggedMetrics[nonDraggedMetrics.length - 1].midpoint
+            ) {
                 return {
-                    nextDropIndex: items.length,
-                    nextDragOverId: items[items.length - 1]?.id ?? null
+                    nextDropIndex: nonDraggedMetrics.length
                 }
             }
         }
 
-        if (container && containerBounds) {
-            const yWithinContainer = clientY - containerBounds.top + container.scrollTop
-            const metrics = itemMetricsRef.current
-
-            for (let index = 0; index < metrics.length; index += 1) {
-                const metric = metrics[index]
-                if (yWithinContainer < metric.midpoint) {
-                    return { nextDropIndex: index, nextDragOverId: metric.id }
-                }
+        for (let index = 0; index < nonDraggedMetrics.length; index += 1) {
+            const metric = nonDraggedMetrics[index]
+            if (probeYWithinContainer < metric.midpoint) {
+                return { nextDropIndex: index }
             }
         }
 
         return {
-            nextDropIndex: items.length,
-            nextDragOverId: items[items.length - 1]?.id ?? null
+            nextDropIndex: nonDraggedMetrics.length
         }
     }, [items])
 
     const updateDropFromClientY = useCallback((clientY: number) => {
-        const { nextDropIndex, nextDragOverId } = getDropFromClientY(clientY)
+        const { nextDropIndex } = getDropFromClientY(clientY)
         if (dropIndexRef.current !== nextDropIndex) {
             dropIndexRef.current = nextDropIndex
             setDropIndex(nextDropIndex)
-        }
-
-        if (dragOverIdRef.current !== nextDragOverId) {
-            dragOverIdRef.current = nextDragOverId
-            setDragOverId(nextDragOverId)
         }
 
         applyDisplacedTransforms(nextDropIndex)
@@ -438,7 +454,6 @@ export function useSortableList<T extends { id: string }>(
 
     const resetDragState = useCallback(() => {
         setDraggingId(null)
-        setDragOverId(null)
         setDropIndex(null)
         setIsDragging(false)
         clearDragTransform()
@@ -449,7 +464,6 @@ export function useSortableList<T extends { id: string }>(
         dragOffsetRef.current = 0
         dragStartScrollTopRef.current = 0
         dropIndexRef.current = null
-        dragOverIdRef.current = null
         dragStartIndexRef.current = null
         dragSlotSizeRef.current = 0
         itemMetricsRef.current = []
@@ -525,13 +539,11 @@ export function useSortableList<T extends { id: string }>(
         didMoveRef.current = false
 
         setDraggingId(id)
-        setDragOverId(id)
         setDropIndex(startIndex)
         setIsDragging(true)
 
         dragOffsetRef.current = 0
         dropIndexRef.current = startIndex
-        dragOverIdRef.current = id
         draggingElementRef.current = itemElementsRef.current.get(id) ?? null
         appliedTransformRef.current = 0
         buildItemMetrics()
@@ -539,29 +551,6 @@ export function useSortableList<T extends { id: string }>(
         dragSlotSizeRef.current = getDragSlotSize(startIndex)
         prepareDragElement(id)
     }, [buildItemMetrics, getDragSlotSize, items, onReorder, prepareDragElement])
-
-    const handleMouseEnter = useCallback((id: string) => {
-        if (!draggingIdRef.current) {
-            return
-        }
-
-        const index = items.findIndex((item) => item.id === id)
-        if (index < 0) {
-            return
-        }
-
-        if (dragOverIdRef.current !== id) {
-            dragOverIdRef.current = id
-            setDragOverId(id)
-        }
-
-        if (dropIndexRef.current !== index) {
-            dropIndexRef.current = index
-            setDropIndex(index)
-        }
-
-        applyDisplacedTransforms(index)
-    }, [applyDisplacedTransforms, items])
 
     const handleMouseMove = useCallback((event: MouseEvent) => {
         if (!enabledRef.current || !draggingIdRef.current) {
@@ -596,18 +585,17 @@ export function useSortableList<T extends { id: string }>(
         }
 
         const fromIndex = items.findIndex((item) => item.id === currentDraggingId)
-        const insertionIndex = dropIndexRef.current ?? fromIndex
+        const targetIndex = dropIndexRef.current ?? fromIndex
 
         if (fromIndex < 0) {
             resetDragState()
             return
         }
 
-        const toIndex = insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex
-        const didPositionChange = toIndex !== fromIndex
+        const didPositionChange = targetIndex !== fromIndex
 
         if (didMoveRef.current && didPositionChange) {
-            const movedItems = moveItem(items, fromIndex, toIndex)
+            const movedItems = moveItem(items, fromIndex, targetIndex)
             onReorder?.(withReindexedDisplayOrder(movedItems))
         }
 
@@ -653,11 +641,9 @@ export function useSortableList<T extends { id: string }>(
 
     return {
         draggingId,
-        dragOverId,
         dropIndex,
         isDragging,
         handleMouseDown,
-        handleMouseEnter,
         handleMouseMove,
         handleMouseUp,
         setContainerElement,

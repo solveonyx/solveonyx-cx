@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase"
-import { MapModelConfig, MapProdConfig, MapProdLineConfig } from "@/types"
+import { MapModelConfig, MapModelConfigOption, MapProdConfig, MapProdLineConfig } from "@/types"
 
 // GET PRODUCT-CONFIG MAPPINGS
 export async function fetchMapProdConfigs(): Promise<MapProdConfig[]> {
@@ -115,6 +115,65 @@ export async function deleteMapModelConfig(
 
     if (error) {
         console.error("deleteMapModelConfig error:", error)
+        throw error
+    }
+}
+
+// GET MODEL-CONFIG OPTION MAPPINGS
+export async function fetchMapModelConfigOptions(): Promise<MapModelConfigOption[]> {
+    const { data, error } = await supabase
+        .from("map_model-config_option")
+        .select("model_id, config_option_id")
+
+    if (error) {
+        console.error("fetchMapModelConfigOptions error:", error)
+        throw error
+    }
+
+    return (data ?? []).map((row) => ({
+        modelId: row.model_id,
+        configOptionId: row.config_option_id
+    }))
+}
+
+// CREATE MODEL-CONFIG OPTION MAPPING
+export async function createMapModelConfigOption(
+    modelId: string,
+    configOptionId: string
+): Promise<MapModelConfigOption> {
+    const { data, error } = await supabase
+        .from("map_model-config_option")
+        .insert([{
+            model_id: modelId,
+            config_option_id: configOptionId
+        }])
+        .select("model_id, config_option_id")
+        .single()
+
+    if (error) {
+        console.error("createMapModelConfigOption error:", error)
+        throw error
+    }
+
+    return {
+        modelId: data.model_id,
+        configOptionId: data.config_option_id
+    }
+}
+
+// DELETE MODEL-CONFIG OPTION MAPPING
+export async function deleteMapModelConfigOption(
+    modelId: string,
+    configOptionId: string
+): Promise<void> {
+    const { error } = await supabase
+        .from("map_model-config_option")
+        .delete()
+        .eq("model_id", modelId)
+        .eq("config_option_id", configOptionId)
+
+    if (error) {
+        console.error("deleteMapModelConfigOption error:", error)
         throw error
     }
 }

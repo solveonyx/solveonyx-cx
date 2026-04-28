@@ -48,5 +48,19 @@ export async function fetchProductHierarchy(
             name: m.model_name,
             displayOrder: m.display_order
         }))
+            .sort((a, b) => {
+                if (a.displayOrder !== b.displayOrder) {
+                    return a.displayOrder - b.displayOrder
+                }
+
+                return a.id.localeCompare(b.id)
+            })
     }))
+        .sort((a, b) => {
+            if (a.displayOrder !== b.displayOrder) {
+                return a.displayOrder - b.displayOrder
+            }
+
+            return a.id.localeCompare(b.id)
+        })
 }

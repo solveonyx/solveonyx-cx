@@ -13,6 +13,15 @@ import {
 } from "@/components/ui/select"
 import { ListEditor } from "@/components/listEditor"
 import { useSortableList } from "@/hooks/useSortableList"
+import {
+    EDITOR_ICON_BUTTON_CLASS,
+    EDITOR_ICON_BUTTON_INTERACTIVE_CLASS,
+    EDITOR_LOCKED_DIMMED_CLASS,
+    EDITOR_MUTED_TEXT_CLASS,
+    hasActiveEditor,
+    isExpansionLocked,
+    isLockedByOtherEditor
+} from "@/lib/editorInteractions"
 import { cn } from "@/lib/utils"
 import { HierarchyEditorChild, HierarchyEditorParent } from "@/types"
 
@@ -173,7 +182,7 @@ export function DualColumnMultiLevelListEditor<
     }, [isParentExpandable, sortedParents])
 
     const toggleChildExpanded = (parent: TParent) => {
-        if (interactionLocked) {
+        if (isExpansionLocked(interactionLocked, activeEditorKey)) {
             return
         }
 
@@ -194,7 +203,7 @@ export function DualColumnMultiLevelListEditor<
     }
 
     const toggleSupplementExpanded = (parentId: string) => {
-        if (interactionLocked) {
+        if (isExpansionLocked(interactionLocked, activeEditorKey)) {
             return
         }
 
@@ -317,7 +326,8 @@ export function DualColumnMultiLevelListEditor<
     const canEditParent = Boolean(onSaveParent || secondaryColumn.onSave)
     const canAddParent = Boolean(onCreateParent)
     const hasLocalParentActiveEditor = editingParentId !== null || isAddingParent
-    const parentIsLocked = interactionLocked || Boolean(activeEditorKey && activeEditorKey !== PARENT_LOCK_KEY)
+    const expansionIsLocked = isExpansionLocked(interactionLocked, activeEditorKey)
+    const parentIsLocked = isLockedByOtherEditor(interactionLocked, activeEditorKey, PARENT_LOCK_KEY)
     const canStartParentAction = !parentIsLocked && !hasLocalParentActiveEditor
     const canSaveNewParent = newParentName.trim().length > 0
     const canSaveEditedParent = parentDraftName.trim().length > 0
@@ -327,7 +337,7 @@ export function DualColumnMultiLevelListEditor<
         sortedParents.length > 1 &&
         allParentsCollapsed &&
         !interactionLocked &&
-        activeEditorKey === null &&
+        !hasActiveEditor(activeEditorKey) &&
         !isSavingParent &&
         !isCreatingParent
     const showParentReorderHandle =
@@ -340,7 +350,7 @@ export function DualColumnMultiLevelListEditor<
     )
 
     useEffect(() => {
-        onActiveStateChange?.(activeEditorKey !== null)
+        onActiveStateChange?.(hasActiveEditor(activeEditorKey))
     }, [activeEditorKey, onActiveStateChange])
 
     const handleChildActiveStateChange = (childKey: string, isActive: boolean) => {
@@ -420,7 +430,7 @@ export function DualColumnMultiLevelListEditor<
                                 }
                                 className={cn(
                                     "rounded-lg border bg-card p-3 shadow-sm transition-[transform,box-shadow,background-color,opacity]",
-                                    !isDraggingRow && "hover:bg-muted/20",
+                                    !isDraggingRow && !expansionIsLocked && "hover:bg-muted/20",
                                     isDraggingRow && "pointer-events-none relative z-20 bg-accent opacity-80 shadow-lg will-change-transform !transition-none"
                                 )}
                             >
@@ -441,9 +451,9 @@ export function DualColumnMultiLevelListEditor<
                                             aria-hidden={!showParentReorderHandle}
                                             tabIndex={showParentReorderHandle ? 0 : -1}
                                             className={cn(
-                                                "self-center bg-transparent text-muted-foreground shadow-none hover:bg-transparent",
+                                                `self-center ${EDITOR_ICON_BUTTON_CLASS}`,
                                                 parentReorderIsAvailable
-                                                    ? "cursor-grab hover:text-foreground active:cursor-grabbing"
+                                                    ? `cursor-grab ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS} active:cursor-grabbing`
                                                     : "cursor-not-allowed opacity-30",
                                                 !showParentReorderHandle &&
                                                     "pointer-events-none invisible"
@@ -454,7 +464,6 @@ export function DualColumnMultiLevelListEditor<
                                     ) : null}
 
                                     <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_72px] gap-x-2 gap-y-3">
-                                    <>
                                         <div className="min-w-0 min-h-[44px]">
                                             <div className="flex min-h-[44px] min-w-0 items-center gap-2">
                                                 <div className="min-w-0 flex-[2_1_0%]">
@@ -472,7 +481,7 @@ export function DualColumnMultiLevelListEditor<
                                                         <div
                                                             className={cn(
                                                                 "flex h-8 items-center rounded-lg border border-transparent px-2.5 py-1 text-sm",
-                                                                interactionLocked && "text-muted-foreground"
+                                                                expansionIsLocked && EDITOR_MUTED_TEXT_CLASS
                                                             )}
                                                         >
                                                             <span className="truncate font-medium">
@@ -512,7 +521,12 @@ export function DualColumnMultiLevelListEditor<
                                                             />
                                                         )
                                                     ) : (
-                                                        <div className="flex h-8 items-center justify-between gap-1.5 rounded-lg border border-transparent py-2 pr-2 pl-2.5 text-sm text-muted-foreground">
+                                                        <div
+                                                            className={cn(
+                                                                "flex h-8 items-center justify-between gap-1.5 rounded-lg border border-transparent py-2 pr-2 pl-2.5 text-sm text-muted-foreground",
+                                                                expansionIsLocked && "opacity-50"
+                                                            )}
+                                                        >
                                                             <span className="min-w-0 truncate">
                                                                 {secondaryDisplayValue || "N/A"}
                                                             </span>
@@ -531,7 +545,7 @@ export function DualColumnMultiLevelListEditor<
                                                     onClick={() => saveParent(parent)}
                                                     disabled={isSavingParent || !canSaveEditedParent}
                                                     aria-label={isSavingParent ? "Saving" : "Save changes"}
-                                                    className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                    className={`${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                                 >
                                                     <Save />
                                                 </Button>
@@ -542,7 +556,7 @@ export function DualColumnMultiLevelListEditor<
                                                     onClick={cancelEditingParent}
                                                     disabled={isSavingParent}
                                                     aria-label="Cancel editing"
-                                                    className="bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                    className={`${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                                 >
                                                     <X />
                                                 </Button>
@@ -555,7 +569,7 @@ export function DualColumnMultiLevelListEditor<
                                                 onClick={() => startEditingParent(parent)}
                                                 disabled={!canStartParentAction || isCreatingParent}
                                                 aria-label={`Edit ${parent.name}`}
-                                                className="self-center justify-self-end bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                                className={`self-center justify-self-end ${EDITOR_ICON_BUTTON_CLASS} ${EDITOR_ICON_BUTTON_INTERACTIVE_CLASS}`}
                                                 >
                                                     <Pencil />
                                                 </Button>
@@ -574,10 +588,12 @@ export function DualColumnMultiLevelListEditor<
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleSupplementExpanded(parent.id)}
-                                                        disabled={interactionLocked}
+                                                        disabled={expansionIsLocked}
                                                         className={cn(
                                                             toggleButtonClass,
-                                                            "hover:text-foreground disabled:cursor-default disabled:opacity-50"
+                                                            expansionIsLocked
+                                                                ? EDITOR_LOCKED_DIMMED_CLASS
+                                                                : EDITOR_ICON_BUTTON_INTERACTIVE_CLASS
                                                         )}
                                                         aria-label={
                                                             isSupplementExpanded
@@ -609,12 +625,12 @@ export function DualColumnMultiLevelListEditor<
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleChildExpanded(parent)}
-                                                        disabled={interactionLocked || !canExpand}
+                                                        disabled={expansionIsLocked || !canExpand}
                                                         className={cn(
                                                             toggleButtonClass,
-                                                            canExpand
-                                                                ? "hover:text-foreground"
-                                                                : "cursor-default opacity-50"
+                                                            canExpand && !expansionIsLocked
+                                                                ? EDITOR_ICON_BUTTON_INTERACTIVE_CLASS
+                                                                : EDITOR_LOCKED_DIMMED_CLASS
                                                         )}
                                                         aria-label={
                                                             isChildExpanded
@@ -635,10 +651,10 @@ export function DualColumnMultiLevelListEditor<
                                                                 sortField="displayOrder"
                                                                 editableField="name"
                                                                 interactionLocked={
-                                                                    interactionLocked ||
-                                                                    Boolean(
-                                                                        activeEditorKey &&
-                                                                        activeEditorKey !== `child:${parent.id}`
+                                                                    isLockedByOtherEditor(
+                                                                        interactionLocked,
+                                                                        activeEditorKey,
+                                                                        `child:${parent.id}`
                                                                     )
                                                                 }
                                                                 onActiveStateChange={(isActive) =>
@@ -682,7 +698,6 @@ export function DualColumnMultiLevelListEditor<
                                                 </div>
                                             ) : null}
                                         </div>
-                                    </>
                                     </div>
                                 </div>
 

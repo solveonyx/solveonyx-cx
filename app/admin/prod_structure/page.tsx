@@ -1,10 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import {
     Select,
     SelectContent,
@@ -26,6 +25,41 @@ export default function ProductHierarchyPage() {
     const [isLoadingProducts, setIsLoadingProducts] = useState(true)
     const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false)
     const [errorMessage, setErrorMessage] = useState("")
+
+    const sortedProducts = useMemo(
+        () =>
+            [...products].sort((a, b) => {
+                if (a.displayOrder !== b.displayOrder) {
+                    return a.displayOrder - b.displayOrder
+                }
+
+                return a.id.localeCompare(b.id)
+            }),
+        [products]
+    )
+
+    const sortedHierarchy = useMemo(
+        () =>
+            [...hierarchy]
+                .sort((a, b) => {
+                    if (a.displayOrder !== b.displayOrder) {
+                        return a.displayOrder - b.displayOrder
+                    }
+
+                    return a.id.localeCompare(b.id)
+                })
+                .map((line) => ({
+                    ...line,
+                    models: [...line.models].sort((a, b) => {
+                        if (a.displayOrder !== b.displayOrder) {
+                            return a.displayOrder - b.displayOrder
+                        }
+
+                        return a.id.localeCompare(b.id)
+                    })
+                })),
+        [hierarchy]
+    )
 
     useEffect(() => {
         const loadProducts = async () => {
@@ -79,31 +113,24 @@ export default function ProductHierarchyPage() {
                 </p>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Product</CardTitle>
-                    <CardDescription>Select a product to inspect its hierarchy.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                    <Label htmlFor="productId">Product</Label>
-                    <Select
-                        value={selectedProductId}
-                        onValueChange={setSelectedProductId}
-                        disabled={isLoadingProducts || products.length === 0}
-                    >
-                        <SelectTrigger id="productId" className="w-full max-w-sm">
-                            <SelectValue placeholder="Select a product" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                    {product.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </CardContent>
-            </Card>
+            <div>
+                <Select
+                    value={selectedProductId}
+                    onValueChange={setSelectedProductId}
+                    disabled={isLoadingProducts || products.length === 0}
+                >
+                    <SelectTrigger id="productId" className="w-full min-w-[220px] sm:w-1/3">
+                        <SelectValue placeholder="Select a product" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" align="start">
+                        {sortedProducts.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                                {product.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
 
             {!selectedProductId && !isLoadingProducts && (
                 <Alert>
@@ -126,9 +153,9 @@ export default function ProductHierarchyPage() {
                         </div>
                     )}
 
-                    {!isLoadingHierarchy && hierarchy.length > 0 && (
+                    {!isLoadingHierarchy && sortedHierarchy.length > 0 && (
                         <div className="space-y-4">
-                            {hierarchy.map((line) => (
+                            {sortedHierarchy.map((line, index) => (
                                 <div key={line.id} className="space-y-2">
                                     <div className="flex items-center gap-2">
                                         <div className="font-medium">{line.name}</div>
@@ -136,7 +163,7 @@ export default function ProductHierarchyPage() {
                                     </div>
 
                                     {line.models.length > 0 && (
-                                        <div className="ml-4 space-y-2 border-l pl-4">
+                                        <div className="ml-4 space-y-2 pl-4">
                                             {line.models.map((model) => (
                                                 <div key={model.id} className="text-sm text-muted-foreground">
                                                     {model.name}
@@ -144,7 +171,7 @@ export default function ProductHierarchyPage() {
                                             ))}
                                         </div>
                                     )}
-                                    <Separator />
+                                    {index < sortedHierarchy.length - 1 && <Separator />}
                                 </div>
                             ))}
                         </div>
